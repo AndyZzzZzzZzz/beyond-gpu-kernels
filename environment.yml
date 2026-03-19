@@ -1,0 +1,20 @@
+name: beyond-gpu
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1
+  - pip:
+      - transformers
+      - accelerate
+      - bitsandbytes
+      - sentencepiece
+      - fastapi     
+      - uvicorn     
+      - pydantic
