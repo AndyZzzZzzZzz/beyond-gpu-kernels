@@ -11,10 +11,7 @@ def run_test(test_name, prompt, max_tokens):
         "temperature": 0.0
     }
     
-    # Track end-to-end wall-clock time
-    t0 = time.time()
     response = requests.post(API_URL, json=payload)
-    t1 = time.time()
     
     if response.status_code == 200:
         print(f"Success! End-to-End Latency: {(t1-t0)*1000:.2f} ms")
