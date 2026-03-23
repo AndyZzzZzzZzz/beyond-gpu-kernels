@@ -107,6 +107,40 @@ AGENT_TOOLS = [
                 "required": ["file_path"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "walk_directory",
+            "description": "Recursively crawls a directory tree to count files and calculate total size. Use this for I/O bound directory analysis.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dir_path": {
+                        "type": "string",
+                        "description": "The local path to the directory (e.g., 'workloads/single_step/mock_fs_payload')"
+                    }
+                },
+                "required": ["dir_path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_database",
+            "description": "Executes a memory-bound full-table scan on a massive SQLite database to count critical errors. Use this when the user asks to query or analyze the database payload.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "db_path": {
+                        "type": "string",
+                        "description": "The local path to the SQLite database file (e.g., 'workloads/single_step/mock_db_payload.db')"
+                    }
+                },
+                "required": ["db_path"]
+            }
+        }
     }
 ]
 
@@ -175,28 +209,45 @@ def generate_text(req: GenerateRequest):
     tool_output_str = ""
     cpp_metrics = None
 
-    # Check if the LLM decided to call your tool
-    if "evaluate_math_file" in response_text:
-        print("\n>>> [AGENT TRIGGERED] Tool call detected! Executing C++ Binary...")
+    if '{"name":' in response_text or "<tool_call>" in response_text:
+        print("\n>>> [AGENT TRIGGERED] Tool call detected! Parsing request...")
         
         try:
-            # Look for the JSON block inside the response
             json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
             if json_match:
-                tool_args = json.loads(json_match.group(0))
-                file_path = tool_args.get("arguments", {}).get("file_path", "") or tool_args.get("file_path", "")
+                tool_req = json.loads(json_match.group(0))
+                tool_name = tool_req.get("name", "")
                 
-                if file_path:
-                    print(f">>> [DEBUG] LLM requested file path: '{file_path}'")
+                # Extract arguments based on different possible LLM output structures
+                args = tool_req.get("arguments", {})
+                if isinstance(args, str):
+                     args = json.loads(args)
+                
+                binary_path = ""
+                target_path = ""
+                
+                # --- Routing Logic ---
+                if "evaluate_math_file" in tool_name or "evaluate_math_file" in response_text:
+                    binary_path = "./tools/calculator/eval_baseline"
+                    target_path = args.get("file_path", "")
+                    print(f">>> [DEBUG] Routing to MATH TOOL with path: '{target_path}'")
                     
-                    # Execute the standalone C++ binary
+                elif "walk_directory" in tool_name or "walk_directory" in response_text:
+                    binary_path = "./tools/io_walker/io_walker_baseline"
+                    target_path = args.get("dir_path", "")
+                    print(f">>> [DEBUG] Routing to I/O WALKER with path: '{target_path}'")
+                elif "query_database" in tool_name or "query_database" in response_text:
+                    binary_path = "./tools/db_retrieval/db_lookup_baseline"
+                    target_path = args.get("db_path", "")
+                    print(f">>> [DEBUG] Routing to DATABASE TOOL with path: '{target_path}'")
+                # --- Execution ---
+                if binary_path and target_path:
                     result = subprocess.run(
-                        ["./tools/calculator/eval_baseline", file_path], 
+                        [binary_path, target_path], 
                         capture_output=True, 
                         text=True
                     )
                     
-                    # --- NEW: Print the hidden C++ error stream ---
                     if result.stderr:
                         print(f">>> [C++ STDERR ERROR]: {result.stderr.strip()}")
                         
@@ -205,7 +256,6 @@ def generate_text(req: GenerateRequest):
                     if not tool_output_str:
                         print(">>> [TOOL ERROR] C++ stdout was completely empty.")
                     else:
-                        # Parse the C++ JSON output
                         try:
                             cpp_data = json.loads(tool_output_str)
                             if cpp_data.get("status") == "success":
