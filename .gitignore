@@ -1,1 +1,17 @@
-__pycache__
+# =========================
+# Benchmarking Payloads
+# =========================
+workloads/single_step/mock_fs_payload/
+workloads/single_step/mock_db_payload.db
+
+# =========================
+# Profiling Results
+# =========================
+results/
+
+# =========================
+# Python & Environment
+# =========================
+__pycache__/
+*.pyc
+.env
