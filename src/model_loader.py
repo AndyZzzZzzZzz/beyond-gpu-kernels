@@ -67,42 +67,49 @@ async def lifespan(app: FastAPI):
     torch.cuda.empty_cache()
 
 # Create the results directory if it doesn't exist
+# Create the results directory if it doesn't exist
 os.makedirs("results", exist_ok=True)
 CSV_FILE = "results/cpu_profiling_log.csv"
+DETAILED_CSV_FILE = "results/detailed_step_log.csv"
 
-# If the file is brand new, write the column headers
+# Initialize global summary log headers
 if not os.path.exists(CSV_FILE):
     with open(CSV_FILE, mode='w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow([
-            "timestamp", "prompt_length_chars", "max_new_tokens", 
+            "timestamp", "test_name", "prompt_length_chars", "max_new_tokens", 
             "cpu_time_ms", "total_cycles", "total_instructions", 
             "ipc", "branch_mispredictions", "llc_misses"
         ])
+
+# Initialize detailed step-by-step log headers
+if not os.path.exists(DETAILED_CSV_FILE):
+    with open(DETAILED_CSV_FILE, mode='w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow([
+            "timestamp", "test_name", "step_number", "phase", "tool_name",
+            "cpu_time_ms", "cycles", "instructions", "ipc", 
+            "branch_misses", "llc_misses"
+        ])
+
 app = FastAPI(title="Qwen Local Agentic Profiler", lifespan=lifespan)
 
-# define what the incoming JSON should look like
 class GenerateRequest(BaseModel):
     prompt: str
     max_new_tokens: int = 512
     temperature: float = 0.0
     test_name: str = "Unknown"
 
-
-# The schema defining C++ tool for the LLM
 AGENT_TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "evaluate_math_file",
-            "description": "Evaluates a massive, complex mathematical expression stored in a local text file. Use this when the user asks to process the math stress workload.",
+            "description": "Evaluates a massive, complex mathematical expression stored in a local text file.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "file_path": {
-                        "type": "string",
-                        "description": "The local path to the text file (e.g., 'workloads/single_step/math_stress_payload.txt')"
-                    }
+                    "file_path": {"type": "string"}
                 },
                 "required": ["file_path"]
             }
@@ -112,14 +119,11 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "walk_directory",
-            "description": "Recursively crawls a directory tree to count files and calculate total size. Use this for I/O bound directory analysis.",
+            "description": "Recursively crawls a directory tree to count files.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "dir_path": {
-                        "type": "string",
-                        "description": "The local path to the directory (e.g., 'workloads/single_step/mock_fs_payload')"
-                    }
+                    "dir_path": {"type": "string"}
                 },
                 "required": ["dir_path"]
             }
@@ -129,14 +133,11 @@ AGENT_TOOLS = [
         "type": "function",
         "function": {
             "name": "query_database",
-            "description": "Executes a memory-bound full-table scan on a massive SQLite database to count critical errors. Use this when the user asks to query or analyze the database payload.",
+            "description": "Executes a memory-bound full-table scan on a SQLite database.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "db_path": {
-                        "type": "string",
-                        "description": "The local path to the SQLite database file (e.g., 'workloads/single_step/mock_db_payload.db')"
-                    }
+                    "db_path": {"type": "string"}
                 },
                 "required": ["db_path"]
             }
@@ -149,144 +150,191 @@ def generate_text(req: GenerateRequest):
     if model is None or tokenizer is None:
         raise HTTPException(status_code=503, detail="Model is still loading.")
 
-    evs = papi.create_eventset()
-    try:
-        papi.add_events(evs, EVENTS_TO_TRACK)
-    except PapiNoEventError:
-        raise HTTPException(status_code=500, detail="PAPI Event Hardware Mismatch")
-
-    # =================================================================
-    # [CPU WINDOW 1]: Prompt Assembly & Tokenization
-    # =================================================================
-    papi.start(evs)
-    t0 = time.perf_counter()
-    
+    # --- AGENTIC LOOP STATE ---
+    MAX_STEPS = 5  
+    current_step = 0
     messages = [{"role": "user", "content": req.prompt}]
-    
-    # [NEW] Pass the tool schema to the tokenizer
-    text = tokenizer.apply_chat_template(
-        messages, 
-        tools=AGENT_TOOLS, 
-        tokenize=False, 
-        add_generation_prompt=True
-    )
+    final_response = ""
 
-    inputs = tokenizer([text], return_tensors="pt").to(model.device)
+    # --- GLOBAL METRIC ACCUMULATORS ---
+    agg_cpu_time_ms = 0
+    agg_cycles = 0
+    agg_instructions = 0
+    agg_branch_misses = 0
+    agg_llc_misses = 0
 
-    t1 = time.perf_counter()
-    pre_results = papi.stop(evs)
+    print(f"\n========== STARTING AGENTIC TASK: {req.test_name} ==========")
 
-    # --- GPU EXECUTION 1 ---
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=req.max_new_tokens,
-            temperature=req.temperature,
-            do_sample=False
+    while current_step < MAX_STEPS:
+        current_step += 1
+        print(f"\n--- [AGENT STEP {current_step}] ---")
+
+        evs = papi.create_eventset()
+        try:
+            papi.add_events(evs, EVENTS_TO_TRACK)
+        except PapiNoEventError:
+            raise HTTPException(status_code=500, detail="PAPI Event Hardware Mismatch")
+
+        # =================================================================
+        # [CPU WINDOW 1]: Prompt Assembly & Tokenization
+        # =================================================================
+        papi.start(evs)
+        t0 = time.perf_counter()
+        
+        text = tokenizer.apply_chat_template(
+            messages, 
+            tools=AGENT_TOOLS, 
+            tokenize=False, 
+            add_generation_prompt=True
         )
 
-    # =================================================================
-    # [CPU WINDOW 2]: Serialization & Tool Interception
-    # =================================================================
-    papi.start(evs)
-    t2 = time.perf_counter()
-    
-    generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, outputs)]
-    
-    # IMPORTANT: skip_special_tokens=False so we can see Qwen's <tool_call> tags
-    response_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=False)[0]
-    
-    t3 = time.perf_counter()
-    post_results = papi.stop(evs) # Stop Python PAPI before running C++
+        inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
-    # --- Metrics Accumulators ---
-    total_cycles = pre_results[0] + post_results[0]
-    total_instructions = pre_results[1] + post_results[1]
-    total_branch_misses = pre_results[2] + post_results[2]
-    total_llc_misses = pre_results[3] + post_results[3]
-    
-    # [NEW] Agentic Interception Logic
-    tool_output_str = ""
-    cpp_metrics = None
+        t1 = time.perf_counter()
+        pre_results = papi.stop(evs)
 
-    if '{"name":' in response_text or "<tool_call>" in response_text:
-        print("\n>>> [AGENT TRIGGERED] Tool call detected! Parsing request...")
+        # --- GPU EXECUTION ---
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=req.max_new_tokens,
+                temperature=req.temperature,
+                do_sample=False
+            )
+
+        # =================================================================
+        # [CPU WINDOW 2]: Serialization & Decoding
+        # =================================================================
+        papi.start(evs)
+        t2 = time.perf_counter()
         
-        try:
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                tool_req = json.loads(json_match.group(0))
-                tool_name = tool_req.get("name", "")
-                
-                # Extract arguments based on different possible LLM output structures
-                args = tool_req.get("arguments", {})
-                if isinstance(args, str):
-                     args = json.loads(args)
-                
-                binary_path = ""
-                target_path = ""
-                
-                # --- Routing Logic ---
-                if "evaluate_math_file" in tool_name or "evaluate_math_file" in response_text:
-                    binary_path = "./tools/calculator/eval_baseline"
-                    target_path = args.get("file_path", "")
-                    print(f">>> [DEBUG] Routing to MATH TOOL with path: '{target_path}'")
+        generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, outputs)]
+        response_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=False)[0]
+        
+        t3 = time.perf_counter()
+        post_results = papi.stop(evs)
+        papi.cleanup_eventset(evs)
+        papi.destroy_eventset(evs)
+
+        # --- STEP-SPECIFIC FRAMEWORK METRICS ---
+        step_cpu_time_ms = ((t1 - t0) + (t3 - t2)) * 1000
+        step_cycles = pre_results[0] + post_results[0]
+        step_instructions = pre_results[1] + post_results[1]
+        step_branch_misses = pre_results[2] + post_results[2]
+        step_llc_misses = pre_results[3] + post_results[3]
+        step_ipc = step_instructions / step_cycles if step_cycles > 0 else 0
+
+        # Log Framework Overhead
+        with open(DETAILED_CSV_FILE, mode='a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                req.test_name, current_step, "LLM_Framework_Overhead", "None",
+                round(step_cpu_time_ms, 2), step_cycles, step_instructions, 
+                round(step_ipc, 3), step_branch_misses, step_llc_misses
+            ])
+
+        # Accumulate Framework Metrics
+        agg_cpu_time_ms += step_cpu_time_ms
+        agg_cycles += step_cycles
+        agg_instructions += step_instructions
+        agg_branch_misses += step_branch_misses
+        agg_llc_misses += step_llc_misses
+
+        # Remember what the LLM just said
+        messages.append({"role": "assistant", "content": response_text})
+
+        # =================================================================
+        # [NEW]: Tool Interception & Feedback Routing
+        # =================================================================
+        tool_triggered = False
+
+        if '{"name":' in response_text or "<tool_call>" in response_text:
+            print(">>> Tool call decided by LLM. Executing...")
+            try:
+                json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                if json_match:
+                    tool_req = json.loads(json_match.group(0))
+                    tool_name = tool_req.get("name", "")
+                    args = tool_req.get("arguments", {})
+                    if isinstance(args, str):
+                         args = json.loads(args)
                     
-                elif "walk_directory" in tool_name or "walk_directory" in response_text:
-                    binary_path = "./tools/io_walker/io_walker_baseline"
-                    target_path = args.get("dir_path", "")
-                    print(f">>> [DEBUG] Routing to I/O WALKER with path: '{target_path}'")
-                elif "query_database" in tool_name or "query_database" in response_text:
-                    binary_path = "./tools/db_retrieval/db_lookup_baseline"
-                    target_path = args.get("db_path", "")
-                    print(f">>> [DEBUG] Routing to DATABASE TOOL with path: '{target_path}'")
-                # --- Execution ---
-                if binary_path and target_path:
-                    result = subprocess.run(
-                        [binary_path, target_path], 
-                        capture_output=True, 
-                        text=True
-                    )
+                    binary_path, target_path = "", ""
                     
-                    if result.stderr:
-                        print(f">>> [C++ STDERR ERROR]: {result.stderr.strip()}")
+                    if "evaluate_math_file" in tool_name or "evaluate_math_file" in response_text:
+                        binary_path = "./tools/calculator/eval_baseline"
+                        target_path = args.get("file_path", "")
+                    elif "walk_directory" in tool_name or "walk_directory" in response_text:
+                        binary_path = "./tools/io_walker/io_walker_baseline"
+                        target_path = args.get("dir_path", "")
+                    elif "query_database" in tool_name or "query_database" in response_text:
+                        binary_path = "./tools/db_retrieval/db_lookup_baseline"
+                        target_path = args.get("db_path", "")
+                    
+                    if binary_path and target_path:
+                        result = subprocess.run([binary_path, target_path], capture_output=True, text=True)
+                        tool_output_str = result.stdout.strip()
                         
-                    tool_output_str = result.stdout.strip()
-                    
-                    if not tool_output_str:
-                        print(">>> [TOOL ERROR] C++ stdout was completely empty.")
-                    else:
-                        try:
-                            cpp_data = json.loads(tool_output_str)
-                            if cpp_data.get("status") == "success":
-                                cpp_metrics = cpp_data.get("metrics", {})
-                                print(f">>> [TOOL SUCCESS] Result: {cpp_data.get('result')}")
-                        except json.JSONDecodeError:
-                            print(f">>> [TOOL ERROR] Failed to parse C++ output: {tool_output_str}")
+                        if tool_output_str:
+                            try:
+                                cpp_data = json.loads(tool_output_str)
+                                if cpp_data.get("status") == "success":
+                                    tool_triggered = True
+                                    print(f">>> Tool Success: {cpp_data.get('result')}")
+                                    
+                                    # --- STEP-SPECIFIC C++ METRICS ---
+                                    cpp_metrics = cpp_data.get("metrics", {})
+                                    cpp_cycles = cpp_metrics.get("cycles", 0)
+                                    cpp_instructions = cpp_metrics.get("instructions", 0)
+                                    cpp_ipc = cpp_instructions / cpp_cycles if cpp_cycles > 0 else 0
+                                    
+                                    # Log Tool Execution
+                                    with open(DETAILED_CSV_FILE, mode='a', newline='') as f:
+                                        writer = csv.writer(f)
+                                        writer.writerow([
+                                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                            req.test_name, current_step, "Tool_Execution", tool_name,
+                                            0.0, # No python time for C++
+                                            cpp_cycles, cpp_instructions, round(cpp_ipc, 3), 
+                                            cpp_metrics.get("branch_misses", 0), 
+                                            cpp_metrics.get("l3_misses", 0)
+                                        ])
 
-        except Exception as e:
-            print(f">>> [TOOL EXECUTION FAILED]: {e}")
+                                    # Accumulate C++ Metrics
+                                    agg_cycles += cpp_cycles
+                                    agg_instructions += cpp_instructions
+                                    agg_branch_misses += cpp_metrics.get("branch_misses", 0)
+                                    agg_llc_misses += cpp_metrics.get("l3_misses", 0)
 
-    papi.cleanup_eventset(evs)
-    papi.destroy_eventset(evs)
+                                    # FEEDBACK LOOP: Inject the result back into the prompt!
+                                    messages.append({
+                                        "role": "user", 
+                                        "content": f"System Output:\n{tool_output_str}\nProceed with the next step or provide your final answer."
+                                    })
+                                    
+                            except json.JSONDecodeError:
+                                print(">>> Failed to parse C++ output.")
+            except Exception as e:
+                print(f">>> Tool execution failed: {e}")
 
-    # --- Merge Python and C++ Metrics ---
-    cpu_time_ms = ((t1 - t0) + (t3 - t2)) * 1000
-    
-    if cpp_metrics:
-        total_cycles += cpp_metrics.get("cycles", 0)
-        total_instructions += cpp_metrics.get("instructions", 0)
-        total_branch_misses += cpp_metrics.get("branch_misses", 0)
-        total_llc_misses += cpp_metrics.get("l3_misses", 0)
+        if not tool_triggered:
+            print(">>> No tool called. Final answer reached.")
+            final_response = response_text
+            break
 
-    ipc = total_instructions / total_cycles if total_cycles > 0 else 0
+    # =================================================================
+    # Log Final Aggregated Data
+    # =================================================================
+    global_ipc = agg_instructions / agg_cycles if agg_cycles > 0 else 0
 
-    print("\n--- COMBINED AGENTIC CPU PROFILE ---")
-    print(f"Total CPU Time (Python ms): {cpu_time_ms:.2f}")
-    print(f"Total IPC:                  {ipc:.3f}")
-    print(f"Total Branch Misses:        {total_branch_misses:,}")
-    print(f"Total LLC Cache Misses:     {total_llc_misses:,}")
-    print("------------------------------------\n")
+    print("\n========== MULTI-STEP PROFILE COMPLETE ==========")
+    print(f"Total Steps Taken:          {current_step}")
+    print(f"Total CPU Time (Python ms): {agg_cpu_time_ms:.2f}")
+    print(f"Total IPC:                  {global_ipc:.3f}")
+    print(f"Total Branch Misses:        {agg_branch_misses:,}")
+    print(f"Total LLC Cache Misses:     {agg_llc_misses:,}")
+    print("=================================================\n")
 
     with open(CSV_FILE, mode='a', newline='') as f:
         writer = csv.writer(f)
@@ -295,16 +343,14 @@ def generate_text(req: GenerateRequest):
             req.test_name,
             len(req.prompt),
             req.max_new_tokens,
-            round(cpu_time_ms, 2),
-            total_cycles,
-            total_instructions,
-            round(ipc, 3),
-            total_branch_misses,
-            total_llc_misses
+            round(agg_cpu_time_ms, 2),
+            agg_cycles,
+            agg_instructions,
+            round(global_ipc, 3),
+            agg_branch_misses,
+            agg_llc_misses
         ])
         
-    final_response = response_text if not tool_output_str else f"Tool executed successfully.\nRaw output:\n{tool_output_str}"
-    
     return {"response": final_response}
 
 if __name__ == "__main__":
