@@ -1,218 +1,219 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
 import os
 
-def base_token_generation_benchmark(csv_path="results/cpu_profiling_log.csv", output_file="results/tokenizer_overhead_comparison.png"):
-    """
-    Reads the CPU profiling CSV, extracts the latest baseline vs stress test runs,
-    and generates a 2x2 microarchitectural bottleneck grid.
-    """
-    # 1. Load the data
+def generate_expA_plot():
+    direct_csv = "results/ExpA_Direct_Baseline.csv"
+    llm_csv = "results/ExpA_LLM_Baseline.csv"
+
+    if not os.path.exists(direct_csv) or not os.path.exists(llm_csv):
+        print("❌ Error: Missing CSV files. Ensure both Direct and LLM tests were run.")
+        return
+
+    # Load Data
+    df_dir = pd.read_csv(direct_csv)
+    df_llm = pd.read_csv(llm_csv)
+
+    # Extract base tool names from the test_name
+    df_dir['tool_type'] = df_dir['test_name'].apply(lambda x: x.split('_')[0])
+    df_llm['tool_type'] = df_llm['test_name'].apply(lambda x: x.split('_')[0])
+
+    # Aggregate by taking the latest run
+    dir_agg = df_dir.groupby('tool_type').last()
+    llm_agg = df_llm.groupby('tool_type').last()
+
+    # Align data
+    tools = ['Math', 'DB', 'FS']
+    direct_times = [dir_agg.loc[t, 'cpu_time_ms'] if t in dir_agg.index else 0 for t in tools]
+    llm_times = [llm_agg.loc[t, 'cpu_time_ms'] if t in llm_agg.index else 0 for t in tools]
+
+    # --- Setup Canvas ---
+    sns.set_theme(style="whitegrid")
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    x = np.arange(len(tools))
+    width = 0.35
+
+    # --- Plotting ---
+    bars1 = ax.bar(x - width/2, direct_times, width, label='Direct C++ Execution (Speed of Light)', color='#2CA02C', edgecolor='black')
+    bars2 = ax.bar(x + width/2, llm_times, width, label='LLM Agentic Execution (Orchestration Tax)', color='#D62728', edgecolor='black')
+
+    # Log scale
+    ax.set_yscale('log')
+    
+    ax.set_title('End-to-End Latency: The Agentic Tax', fontsize=16, fontweight='bold', pad=15)
+    ax.set_xlabel('Workload Type', fontsize=14)
+    ax.set_ylabel('Total Request Time (ms) [Log Scale]', fontsize=14)
+    ax.set_xticks(x)
+    ax.set_xticklabels(['Compute (AST Math)', 'Memory (DB Scan)', 'I/O (FS Walk)'], fontsize=13)
+    ax.legend(fontsize=12, loc='upper left')
+
+    # Annotate multiplier above the LLM bars
+    for i in range(len(tools)):
+        if direct_times[i] > 0:
+            multiplier = llm_times[i] / direct_times[i]
+            # Pushed the text slightly higher above the bar (1.3x)
+            ax.text(x[i] + width/2, llm_times[i] * 1.3, f"{multiplier:.1f}x", ha='center', va='bottom', fontsize=12, fontweight='bold', color='#D62728')
+
+    # =================================================================
+    # [NEW] Dynamically scale the Y-axis to give the text headroom
+    # =================================================================
+    max_llm_time = max(llm_times)
+    ax.set_ylim(top=max_llm_time * 10) # 10x gives exactly one full "log tick" of headroom
+
+    plt.tight_layout()
+    output_filename = "results/ExpA_Agentic_Tax.png"
+    plt.savefig(output_filename, dpi=300, bbox_inches='tight')
+    print(f"📈 Success! Publication-ready plot saved to {output_filename}")
+
+
+def generate_expB_plot(csv_path="results/ExpB_Multistep_Analysis.csv"):
     if not os.path.exists(csv_path):
-        print(f"Error: Could not find {csv_path}")
+        print(f"❌ Error: Could not find {csv_path}")
         return
-
-    df = pd.read_csv(csv_path)
-
-    # 2. Filter and Extract Data
-    # Drop the warmup rows (where the prompt was just the word "warmup", length ~6)
-    df_clean = df[df["prompt_length_chars"] > 10].copy()
-
-    # Grab the last two rows to represent the most recent Baseline and Stress Test runs
-    latest_runs = df_clean.tail(2)
-
-    if len(latest_runs) < 2:
-        print("Not enough data to compare. Please run the test script first.")
-        return
-
-    labels = ['Baseline\n(18 chars)', 'Stress Test\n(16k chars)']
-
-    # Extract metrics into lists
-    cpu_time = latest_runs['cpu_time_ms'].values
-    instructions = latest_runs['total_instructions'].values
-    ipc = latest_runs['ipc'].values
-    branch_misses = latest_runs['branch_mispredictions'].values
-    llc_misses = latest_runs['llc_misses'].values
-
-    # 3. Setup the Plot Canvas (2x2 grid)
-    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-    fig.suptitle('Agentic Microarchitectural Bottleneck: Tokenizer Overhead', fontsize=16, fontweight='bold')
-
-    # --- Plot 1: Total Instructions ---
-    axs[0, 0].bar(labels, instructions, color=['#4C72B0', '#C44E52'])
-    axs[0, 0].set_title('Total Instructions Completed', fontsize=12)
-    axs[0, 0].set_ylabel('Count (10s of Millions)')
-    axs[0, 0].grid(axis='y', linestyle='--', alpha=0.7)
-
-    # --- Plot 2: CPU Time ---
-    axs[0, 1].bar(labels, cpu_time, color=['#4C72B0', '#C44E52'])
-    axs[0, 1].set_title('CPU Execution Time', fontsize=12)
-    axs[0, 1].set_ylabel('Milliseconds (ms)')
-    axs[0, 1].grid(axis='y', linestyle='--', alpha=0.7)
-
-    # --- Plot 3: IPC ---
-    axs[1, 0].bar(labels, ipc, color=['#4C72B0', '#C44E52'])
-    axs[1, 0].set_title('Instructions Per Cycle (IPC)', fontsize=12)
-    axs[1, 0].set_ylabel('IPC')
-    axs[1, 0].set_ylim(0, max(ipc) * 1.2) # Give some headroom for the label
-    axs[1, 0].grid(axis='y', linestyle='--', alpha=0.7)
-
-    # --- Plot 4: Hardware Misses (Grouped Bar Chart) ---
-    x = np.arange(len(labels))
-    width = 0.35
-    axs[1, 1].bar(x - width/2, branch_misses, width, label='Branch Misses', color='#55A868')
-    axs[1, 1].bar(x + width/2, llc_misses, width, label='LLC Misses', color='#8172B3')
-    axs[1, 1].set_title('Microarchitectural Misses', fontsize=12)
-    axs[1, 1].set_ylabel('Count')
-    axs[1, 1].set_xticks(x)
-    axs[1, 1].set_xticklabels(labels)
-    axs[1, 1].legend()
-    axs[1, 1].grid(axis='y', linestyle='--', alpha=0.7)
-
-    # 4. Save the graphic
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Adjust layout to fit the main title
-    plt.savefig(output_file, dpi=300)
-    print(f"✅ Success! Plot saved locally to {output_file}")
-    
-    plt.close(fig)
-
-def compute_bound_benchmark(output_file="results/math_vs_baseline.png"):
-    """
-    Generates a 2x2 microarchitectural bottleneck grid comparing the 
-    LLM baseline token generation against the compute-bound C++ math tool.
-    """
-    # 1. Load the exact data points from your test run
-    data = {
-        "test_name": ["Base Test: Token Generation", "Test 3: Agentic Tool Call"],
-        "cpu_time_ms": [22.38, 20.7],
-        "total_instructions": [98212662, 244643519],
-        "ipc": [2.343, 1.866],
-        "branch_mispredictions": [47595, 497257],
-        "llc_misses": [31054, 120212]
-    }
-    df = pd.DataFrame(data)
-
-    labels = ['Token Generation\n(Baseline)', 'Agentic Math Tool\n(Compute Bound)']
-
-    # 2. Setup the Plot Canvas (2x2 grid)
-    fig, axs = plt.subplots(2, 2, figsize=(12, 10))
-    fig.suptitle('Agentic Microarchitectural Bottleneck: Math Tool vs Baseline', fontsize=16, fontweight='bold')
-
-    # --- Plot 1: Total Instructions ---
-    axs[0, 0].bar(labels, df['total_instructions'], color=['#4C72B0', '#C44E52'])
-    axs[0, 0].set_title('Total Instructions Completed', fontsize=12)
-    axs[0, 0].set_ylabel('Count (100s of Millions)')
-    axs[0, 0].grid(axis='y', linestyle='--', alpha=0.7)
-
-    # --- Plot 2: CPU Time ---
-    axs[0, 1].bar(labels, df['cpu_time_ms'], color=['#4C72B0', '#C44E52'])
-    axs[0, 1].set_title('CPU Execution Time', fontsize=12)
-    axs[0, 1].set_ylabel('Milliseconds (ms)')
-    axs[0, 1].grid(axis='y', linestyle='--', alpha=0.7)
-
-    # --- Plot 3: IPC ---
-    axs[1, 0].bar(labels, df['ipc'], color=['#4C72B0', '#C44E52'])
-    axs[1, 0].set_title('Instructions Per Cycle (IPC)', fontsize=12)
-    axs[1, 0].set_ylabel('IPC')
-    axs[1, 0].set_ylim(0, max(df['ipc']) * 1.2) # Give headroom for label
-    axs[1, 0].grid(axis='y', linestyle='--', alpha=0.7)
-
-    # --- Plot 4: Hardware Misses (Grouped Bar Chart) ---
-    x = np.arange(len(labels))
-    width = 0.35
-    axs[1, 1].bar(x - width/2, df['branch_mispredictions'], width, label='Branch Misses', color='#55A868')
-    axs[1, 1].bar(x + width/2, df['llc_misses'], width, label='LLC Misses', color='#8172B3')
-    axs[1, 1].set_title('Microarchitectural Misses', fontsize=12)
-    axs[1, 1].set_ylabel('Count')
-    axs[1, 1].set_xticks(x)
-    axs[1, 1].set_xticklabels(labels)
-    axs[1, 1].legend()
-    axs[1, 1].grid(axis='y', linestyle='--', alpha=0.7)
-
-    # 3. Save the graphic
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(output_file, dpi=300)
-    print(f"✅ Success! Plot saved locally to {output_file}")
-    
-    # Close the plot to free memory
-    plt.close(fig)
-
-def tool_class_comparison_benchmark(output_file="results/four_way_tool_class_comparison.png"):
-    """
-    Generates a 2x2 grid comparing all four current workloads:
-    Baseline Token Generation vs. Compute-Bound vs. I/O-Bound vs. Analytics (DB).
-    """
-    # 1. Load the exact data points from your test runs
-    # (Note: Assuming ~105M total instructions for the DB query based on your IPC/Time ratio)
-    data = {
-        "test_name": ["Base Test: Token Generation", "Test 3: Agentic Tool Call", "Test 4: I/O Walker Tool Call", "Test 5: DB Memory-Bound Tool Call"],
-        "cpu_time_ms": [22.38, 20.7, 21.61, 24.97],
-        "total_instructions": [98212662, 244643519, 89019182, 105642391], 
-        "ipc": [2.343, 1.866, 1.663, 2.057],
-        "branch_mispredictions": [47595, 497257, 164528, 16996029],
-        "llc_misses": [31054, 120212, 72276, 92226]
-    }
-    df = pd.DataFrame(data)
-
-    labels = ['Baseline\n(Token Gen)', 'Math Tool\n(Compute)', 'FS Walker\n(I/O)', 'DB Query\n(Analytics)']
-    
-    # Colors: Blue (Baseline), Red (Compute), Green (I/O), Purple (Analytics)
-    bar_colors = ['#4C72B0', '#C44E52', '#55A868', '#9B59B6']
-
-    # 2. Setup the Plot Canvas (2x2 grid)
-    # Increased width slightly to accommodate 4 labels comfortably
-    fig, axs = plt.subplots(2, 2, figsize=(16, 10))
-    fig.suptitle('Agentic Microarchitectural Bottleneck: 4-Way Workload Comparison', fontsize=18, fontweight='bold')
-
-    # --- Plot 1: Total Instructions ---
-    axs[0, 0].bar(labels, df['total_instructions'], color=bar_colors)
-    axs[0, 0].set_title('Total Instructions Completed', fontsize=12)
-    axs[0, 0].set_ylabel('Count (100s of Millions)')
-    axs[0, 0].grid(axis='y', linestyle='--', alpha=0.7)
-
-    # --- Plot 2: CPU Time ---
-    axs[0, 1].bar(labels, df['cpu_time_ms'], color=bar_colors)
-    axs[0, 1].set_title('CPU Execution Time', fontsize=12)
-    axs[0, 1].set_ylabel('Milliseconds (ms)')
-    axs[0, 1].grid(axis='y', linestyle='--', alpha=0.7)
-
-    # --- Plot 3: IPC ---
-    axs[1, 0].bar(labels, df['ipc'], color=bar_colors)
-    axs[1, 0].set_title('Instructions Per Cycle (IPC)', fontsize=12)
-    axs[1, 0].set_ylabel('IPC (Higher is Better)')
-    axs[1, 0].set_ylim(0, max(df['ipc']) * 1.2)
-    
-    # Add value labels on top of the IPC bars for clarity
-    for i, v in enumerate(df['ipc']):
-        axs[1, 0].text(i, v + 0.05, f"{v:.3f}", ha='center', fontweight='bold')
         
-    axs[1, 0].grid(axis='y', linestyle='--', alpha=0.7)
+    df = pd.read_csv(csv_path)
+    if df.empty:
+        print("❌ Error: CSV is empty.")
+        return
 
-    # --- Plot 4: Hardware Misses (Log Scale) ---
-    x = np.arange(len(labels))
+    # Grab the most recent Gauntlet test automatically
+    latest_test = df['test_name'].iloc[-1]
+    print(f"📊 Plotting data for: {latest_test}")
+    df = df[df['test_name'] == latest_test]
+
+    # --- Setup Canvas ---
+    sns.set_theme(style="whitegrid")
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+    
+    # Extract data pivots
+    pivot_inst = df.pivot_table(index="step_number", columns="phase", values="instructions", aggfunc="sum").fillna(0)
+    pivot_ipc = df.pivot_table(index="step_number", columns="phase", values="ipc", aggfunc="mean").fillna(0)
+    
+    x = np.arange(len(pivot_inst.index))
     width = 0.35
-    
-    # We MUST use a log scale here because the DB branch misses (16.9M) will completely dwarf everything else
-    axs[1, 1].bar(x - width/2, df['branch_mispredictions'], width, label='Branch Misses', color='#E1812C')
-    axs[1, 1].bar(x + width/2, df['llc_misses'], width, label='LLC Misses', color='#8172B3')
-    
-    axs[1, 1].set_yscale('log') # Crucial addition for the 4-way chart
-    axs[1, 1].set_title('Microarchitectural Misses (Log Scale)', fontsize=12)
-    axs[1, 1].set_ylabel('Count (Log10)')
-    axs[1, 1].set_xticks(x)
-    axs[1, 1].set_xticklabels(labels)
-    axs[1, 1].legend()
-    axs[1, 1].grid(axis='y', linestyle='--', alpha=0.7)
 
-    # 3. Save the graphic
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(output_file, dpi=300)
-    print(f"✅ Success! Plot saved locally to {output_file}")
+    # =================================================================
+    # PLOT 1: INSTRUCTION VOLUME (LOG SCALE)
+    # =================================================================
+    ax1 = axes[0]
+    ax1.bar(x - width/2, pivot_inst.get('LLM_Framework_Overhead', [0]*len(x)), width, 
+            label='Python Framework Overhead', color='#4C72B0', edgecolor='black')
     
-    plt.close(fig)
+    ax1.bar(x + width/2, pivot_inst.get('Tool_Execution', [0]*len(x)), width, 
+            label='C++ Tool Execution', color='#C44E52', edgecolor='black')
     
+    # Log scale is mandatory here because DB is 5 Billion, Walker is 10 Million
+    ax1.set_yscale('log')
+    ax1.set_title('Instruction Volume per ReAct Step', fontsize=15, fontweight='bold', pad=15)
+    ax1.set_xlabel('Agentic Loop Step', fontsize=13)
+    ax1.set_ylabel('Total Instructions Executed (Log Scale)', fontsize=13)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels([f"Step {i}" for i in pivot_inst.index])
+    ax1.legend(loc="upper right")
+
+    # =================================================================
+    # PLOT 2: MICROARCHITECTURAL EFFICIENCY (IPC)
+    # =================================================================
+    ax2 = axes[1]
+    ax2.bar(x - width/2, pivot_ipc.get('LLM_Framework_Overhead', [0]*len(x)), width, 
+            label='Python Framework Overhead', color='#4C72B0', edgecolor='black')
+    
+    ax2.bar(x + width/2, pivot_ipc.get('Tool_Execution', [0]*len(x)), width, 
+            label='C++ Tool Execution', color='#C44E52', edgecolor='black')
+    
+    ax2.set_title('CPU Utilization Efficiency (IPC)', fontsize=15, fontweight='bold', pad=15)
+    ax2.set_xlabel('Agentic Loop Step', fontsize=13)
+    ax2.set_ylabel('Instructions Per Cycle (Higher = Better)', fontsize=13)
+    ax2.set_xticks(x)
+    ax2.set_xticklabels([f"Step {i}" for i in pivot_ipc.index])
+    
+    # Set y-limit slightly higher to make room for tool labels
+    ax2.set_ylim(0, 2.5)
+
+    # Annotate the specific tools on top of the red bars
+    for i, step in enumerate(pivot_ipc.index):
+        tool_row = df[(df['step_number'] == step) & (df['phase'] == 'Tool_Execution')]
+        if not tool_row.empty:
+            tool_name = tool_row.iloc[0]['tool_name']
+            if tool_name != "None":
+                val = pivot_ipc.loc[step, 'Tool_Execution']
+                # Clean up the name for the label (e.g., query_database -> query\ndatabase)
+                clean_name = str(tool_name).replace('_', '\n')
+                ax2.text(x[i] + width/2, val + 0.05, clean_name, ha='center', va='bottom', 
+                         fontsize=10, fontweight='bold', color='#8B0000')
+
+    # --- Save and Render ---
+    plt.tight_layout()
+    output_filename = f"results/{latest_test}_analysis.png"
+    plt.savefig(output_filename, dpi=300, bbox_inches='tight')
+    print(f"📈 Success! Publication-ready plot saved to {output_filename}")
+
+
+def generate_masking_plot():
+    vanilla_path = "results/Exp3_LLM_Vanilla_Detailed.csv"
+    opt_path = "results/Exp3_LLM_Optimized_Detailed.csv"
+
+    if not os.path.exists(vanilla_path) or not os.path.exists(opt_path):
+        print("❌ Error: Missing Experiment 3 CSV files.")
+        return
+
+    # Load data
+    df_v = pd.read_csv(vanilla_path)
+    df_o = pd.read_csv(opt_path)
+
+    def get_metrics(df):
+        # Extract framework cycles and tool cycles
+        fw_cycles = df[df['phase'] == 'LLM_Framework_Overhead']['cycles'].sum()
+        tool_cycles = df[df['phase'] == 'Tool_Execution']['cycles'].sum()
+        return fw_cycles, tool_cycles
+
+    v_fw, v_tool = get_metrics(df_v)
+    o_fw, o_tool = get_metrics(df_o)
+
+    # Calculate Speedups
+    tool_speedup = v_tool / o_tool if o_tool > 0 else 1
+    total_speedup = (v_fw + v_tool) / (o_fw + o_tool)
+
+    # --- Plotting ---
+    sns.set_theme(style="whitegrid")
+    fig, ax = plt.subplots(figsize=(8, 7))
+
+    labels = ['Vanilla (Baseline)', 'Hardware-Optimized (AVX2)']
+    fw_data = [v_fw, o_fw]
+    tool_data = [v_tool, o_tool]
+
+    # Plot Stacked Bars
+    ax.bar(labels, fw_data, label='LLM Framework Overhead', color='#4C72B0', edgecolor='black', width=0.6)
+    ax.bar(labels, tool_data, bottom=fw_data, label='Tool Execution (Math Kernel)', color='#C44E52', edgecolor='black', width=0.6)
+
+    # Formatting
+    ax.set_ylabel('Total CPU Cycles', fontsize=14, fontweight='bold')
+    ax.set_title('The Masking Effect: Hardware Speedup vs. System Latency', fontsize=16, pad=20, fontweight='bold')
+    ax.legend(loc='upper right', fontsize=12)
+
+    # Annotations for the Paper
+    # Tool Speedup Text
+    ax.text(0, v_fw + v_tool/2, f"Baseline\nTool", ha='center', color='white', fontweight='bold')
+    ax.text(1, o_fw + o_tool/2, f"{tool_speedup:.1f}x Faster\nKernel", ha='center', color='black', fontweight='bold', fontsize=11)
+    
+    # System Summary Annotation
+    summary_text = (f"Kernel Speedup: {tool_speedup:.2f}x\n"
+                    f"System Speedup: {total_speedup:.2f}x\n"
+                    f"Orchestration Tax: {((v_fw/(v_fw+v_tool))*100):.1f}%")
+    
+    plt.annotate(summary_text, xy=(0.5, 0.2), xycoords='axes fraction', 
+                 bbox=dict(boxstyle="round,pad=0.5", fc="yellow", alpha=0.2),
+                 fontsize=12, fontweight='bold', ha='center')
+
+    plt.tight_layout()
+    output_png = "results/Exp3_Masking_Effect.png"
+    plt.savefig(output_png, dpi=300)
+    print(f"📈 Success! Plot saved to {output_png}")
+
 if __name__ == "__main__":
-    # base_token_generation_benchmark()
-    # compute_bound_benchmark()
-    tool_class_comparison_benchmark()
+    generate_masking_plot()
+
+    
