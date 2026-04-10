@@ -1,0 +1,4 @@
+timestamp,test_name,pipeline_mode,cpu_time_ms,tool_wall_ms,cycles,instructions,ipc,branch_misses,llc_misses
+2026-04-09 18:34:09,Math_Direct_Baseline_1775784849,direct,83.17,82.41,84299884,167645564,1.989,345506,45064
+2026-04-09 18:34:10,DB_Direct_Baseline_1775784849,direct,764.66,764.47,2516017444,5182759293,2.06,16819261,13768
+2026-04-09 18:34:10,FS_Direct_Baseline_1775784850,direct,15.35,15.19,5223047,10270829,1.966,10663,586

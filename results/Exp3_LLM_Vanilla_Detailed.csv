@@ -1,0 +1,4 @@
+timestamp,test_name,step_number,phase,tool_name,cpu_time_ms,cycles,instructions,ipc,branch_misses,llc_misses
+2026-04-09 19:49:20,Exp3_LLM_Vanilla,1,LLM_Framework_Overhead,None,17.92,47065912,78369385,1.665,155089,53492
+2026-04-09 19:49:20,Exp3_LLM_Vanilla,1,Tool_Execution,evaluate_math_file,0.0,84139727,167645562,1.992,344936,45145
+2026-04-09 19:49:24,Exp3_LLM_Vanilla,2,LLM_Framework_Overhead,None,3.8,6725662,10923064,1.624,25390,12326

@@ -1,0 +1,2 @@
+timestamp,test_name,prompt_length,tokens,cpu_time_ms,cycles,instructions,ipc,branch_misses,llc_misses
+2026-04-09 20:07:42,Exp3_LLM_Optimized,237,100,4979.13,137708570,257203354,1.868,524338,108113

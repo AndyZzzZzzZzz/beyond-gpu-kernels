@@ -1,0 +1,8 @@
+timestamp,test_name,step_number,phase,tool_name,cpu_time_ms,cycles,instructions,ipc,branch_misses,llc_misses
+2026-04-09 16:56:17,MultiStep_Gauntlet_1775778976,1,LLM_Framework_Overhead,None,24.76,49507872,82133615,1.659,157263,69555
+2026-04-09 16:56:17,MultiStep_Gauntlet_1775778976,1,Tool_Execution,walk_directory,0.0,4988414,10270824,2.059,9610,679
+2026-04-09 16:56:18,MultiStep_Gauntlet_1775778976,2,LLM_Framework_Overhead,None,8.22,8089132,13748830,1.7,28628,10187
+2026-04-09 16:56:20,MultiStep_Gauntlet_1775778976,2,Tool_Execution,query_database,0.0,2546141791,5182762986,2.036,17112418,3770
+2026-04-09 16:56:21,MultiStep_Gauntlet_1775778976,3,LLM_Framework_Overhead,None,7.12,8678547,16112366,1.857,28034,38375
+2026-04-09 16:56:21,MultiStep_Gauntlet_1775778976,3,Tool_Execution,evaluate_math_file,0.0,84238801,167645564,1.99,340928,45076
+2026-04-09 16:56:32,MultiStep_Gauntlet_1775778976,4,LLM_Framework_Overhead,None,6.18,9844890,18846393,1.914,30288,12092
