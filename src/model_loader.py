@@ -51,10 +51,10 @@ async def lifespan(app: FastAPI):
     torch.cuda.empty_cache()
 
 # --- File Setup ---
-os.makedirs("results", exist_ok=True)
-CSV_FILE = "results/cpu_profiling_log.csv"               # Overall LLM Runs
-DETAILED_CSV_FILE = "results/detailed_step_log.csv"      # Granular LLM Steps
-PIPELINE_CSV_FILE = "results/cpu_profiling_pipeline.csv" # Baseline Direct Runs
+os.makedirs("../results", exist_ok=True)
+CSV_FILE = "../results/cpu_profiling_log.csv"               # Overall LLM Runs
+DETAILED_CSV_FILE = "../results/detailed_step_log.csv"      # Granular LLM Steps
+# PIPELINE_CSV_FILE = "../results/cpu_profiling_pipeline.csv" # Baseline Direct Runs
 
 def _init_csv(file_path: str, headers: List[str]):
     if not os.path.exists(file_path):
@@ -64,7 +64,7 @@ def _init_csv(file_path: str, headers: List[str]):
 
 _init_csv(CSV_FILE, ["timestamp", "test_name", "prompt_length", "tokens", "cpu_time_ms", "cycles", "instructions", "ipc", "branch_misses", "llc_misses"])
 _init_csv(DETAILED_CSV_FILE, ["timestamp", "test_name", "step_number", "phase", "tool_name", "cpu_time_ms", "cycles", "instructions", "ipc", "branch_misses", "llc_misses"])
-_init_csv(PIPELINE_CSV_FILE, ["timestamp", "test_name", "pipeline_mode", "cpu_time_ms", "tool_wall_ms", "cycles", "instructions", "ipc", "branch_misses", "llc_misses"])
+# _init_csv(PIPELINE_CSV_FILE, ["timestamp", "test_name", "pipeline_mode", "cpu_time_ms", "tool_wall_ms", "cycles", "instructions", "ipc", "branch_misses", "llc_misses"])
 
 app = FastAPI(title="Qwen Local Agentic Profiler", lifespan=lifespan)
 
@@ -197,6 +197,8 @@ async def generate_text(req: GenerateRequest):
     # =====================================================================
     # MODE 2: FULL AGENTIC LLM LOOP (The "Agentic Tax" Benchmark)
     # =====================================================================
+    request_start = time.perf_counter()
+
     try:
         evs = papi.create_eventset()
         papi.add_events(evs, EVENTS_TO_TRACK)
@@ -308,9 +310,11 @@ async def generate_text(req: GenerateRequest):
 
     # --- Final Logging ---
     global_ipc = agg_inst / agg_cyc if agg_cyc > 0 else 0
+    total_request_ms = (time.perf_counter() - request_start) * 1000 # <--- CALCULATE TOTAL TIME
+
     with open(CSV_FILE, mode='a', newline='') as f:
         csv.writer(f).writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), req.test_name, len(req.prompt), req.max_new_tokens,
-                                round(agg_cpu_ms, 2), agg_cyc, agg_inst, round(global_ipc, 3), agg_br, agg_l3])
+                                round(total_request_ms, 2), agg_cyc, agg_inst, round(global_ipc, 3), agg_br, agg_l3])
         
     return {"response": final_response, "metrics_valid": True}
 
