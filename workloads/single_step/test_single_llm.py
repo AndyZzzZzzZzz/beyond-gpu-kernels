@@ -20,7 +20,7 @@ def run_llm_baseline():
         Do not do anything else.""")
     ]
     
-    print("\n🚀 STARTING EXPERIMENT A: LLM BASELINES")
+    print("\nSTARTING EXPERIMENT A: LLM BASELINES")
     print("Routing tasks through Qwen 2.5 7B orchestration...\n")
     
     for test_name, prompt in workloads:
@@ -36,9 +36,9 @@ def run_llm_baseline():
             print(f"Executing: {test_name}...")
             response = requests.post(url, json=payload)
             response.raise_for_status()
-            print(f"✅ Success. Output:\n{response.json().get('response')}\n")
+            print(f"Success. Output:\n{response.json().get('response')}\n")
         except requests.exceptions.RequestException as e:
-            print(f"❌ Error on {test_name}: {e}")
+            print(f"Error on {test_name}: {e}")
 
 
 if __name__ == "__main__":

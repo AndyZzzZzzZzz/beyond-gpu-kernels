@@ -16,18 +16,18 @@ def run_db_vanilla():
         "tool_variants": None                # Defaults to baseline kernel
     }
     
-    print("🚀 Running LLM + VANILLA DB Kernel...")
+    print("Running LLM + VANILLA DB Kernel...")
     try:
         response = requests.post(url, json=payload)
         response.raise_for_status()
-        print("✅ Vanilla DB run complete.")
+        print("Vanilla DB run complete.")
         
         # Isolate results for cleaning plotting
         os.rename("../../results/cpu_profiling_log.csv", "../../results/Exp4_DB_Vanilla_Summary.csv")
         os.rename("../../results/detailed_step_log.csv", "../../results/Exp4_DB_Vanilla_Detailed.csv")
-        print("📁 Data saved to: results/Exp4_DB_Vanilla_*.csv")
+        print("Data saved to: results/Exp4_DB_Vanilla_*.csv")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     run_db_vanilla()

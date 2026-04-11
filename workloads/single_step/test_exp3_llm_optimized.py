@@ -21,18 +21,18 @@ def run_llm_optimized():
         }
     }
     
-    print("🚀 Running LLM + OPTIMIZED (AVX2) Kernel...")
+    print("Running LLM + OPTIMIZED (AVX2) Kernel...")
     try:
         response = requests.post(url, json=payload)
         response.raise_for_status()
-        print("✅ Run complete.")
+        print("Run complete.")
         
         # Rename the results for Experiment 3
         os.rename("../../results/cpu_profiling_log.csv", "../../results/Exp3_LLM_Optimized_Summary.csv")
         os.rename("../../results/detailed_step_log.csv", "../../results/Exp3_LLM_Optimized_Detailed.csv")
-        print("📁 Data saved to: results/Exp3_LLM_Optimized_*.csv")
+        print("Data saved to: results/Exp3_LLM_Optimized_*.csv")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     run_llm_optimized()

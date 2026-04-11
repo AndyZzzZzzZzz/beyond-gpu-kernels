@@ -14,9 +14,9 @@ def run_io_vanilla():
         "tool_variants": None # Defaults to baseline
     }
     
-    print("🚀 Running LLM + VANILLA IO Kernel...")
+    print("Running LLM + VANILLA IO Kernel...")
     response = requests.post(url, json=payload)
-    print("✅ Run complete.")
+    print("Run complete.")
     
     os.rename("../../results/cpu_profiling_log.csv", "../../results/Exp5_IO_Vanilla_Summary.csv")
     os.rename("../../results/detailed_step_log.csv", "../../results/Exp5_IO_Vanilla_Detailed.csv")

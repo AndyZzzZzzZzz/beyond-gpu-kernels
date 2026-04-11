@@ -16,9 +16,9 @@ def run_io_optimized():
         }
     }
     
-    print("🚀 Running LLM + OPTIMIZED (OpenMP) IO Kernel...")
+    print("Running LLM + OPTIMIZED (OpenMP) IO Kernel...")
     response = requests.post(url, json=payload)
-    print("✅ Run complete.")
+    print("Run complete.")
     
     os.rename("../../results/cpu_profiling_log.csv", "../../results/Exp5_IO_Optimized_Summary.csv")
     os.rename("../../results/detailed_step_log.csv", "../../results/Exp5_IO_Optimized_Detailed.csv")
