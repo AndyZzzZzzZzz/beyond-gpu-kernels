@@ -20,18 +20,18 @@ def run_llm_vanilla():
         "tool_variants": None   # Uses baseline C++
     }
     
-    print("🚀 Running LLM + VANILLA Kernel...")
+    print("Running LLM + VANILLA Kernel...")
     try:
         response = requests.post(url, json=payload)
         response.raise_for_status()
-        print("✅ Run complete.")
+        print("Run complete.")
         
         # Rename the results for Experiment 3
         os.rename("../../results/cpu_profiling_log.csv", "../../results/Exp3_LLM_Vanilla_Summary.csv")
         os.rename("../../results/detailed_step_log.csv", "../../results/Exp3_LLM_Vanilla_Detailed.csv")
-        print("📁 Data saved to: results/Exp3_LLM_Vanilla_*.csv")
+        print("Data saved to: results/Exp3_LLM_Vanilla_*.csv")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
     run_llm_vanilla()

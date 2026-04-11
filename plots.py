@@ -9,7 +9,7 @@ def generate_expA_plot():
     llm_csv = "results/ExpA_LLM_Baseline.csv"
 
     if not os.path.exists(direct_csv) or not os.path.exists(llm_csv):
-        print("❌ Error: Missing CSV files. Ensure both Direct and LLM tests were run.")
+        print("Error: Missing CSV files. Ensure both Direct and LLM tests were run.")
         return
 
     # Load Data
@@ -71,12 +71,12 @@ def generate_expA_plot():
 
 def generate_expB_plot(csv_path="results/ExpB_Multistep_Analysis.csv"):
     if not os.path.exists(csv_path):
-        print(f"❌ Error: Could not find {csv_path}")
+        print(f"Error: Could not find {csv_path}")
         return
         
     df = pd.read_csv(csv_path)
     if df.empty:
-        print("❌ Error: CSV is empty.")
+        print("Error: CSV is empty.")
         return
 
     # Grab the most recent Gauntlet test automatically
@@ -157,7 +157,7 @@ def generate_masking_plot():
     opt_path = "results/Exp3_LLM_Optimized_Detailed.csv"
 
     if not os.path.exists(vanilla_path) or not os.path.exists(opt_path):
-        print("❌ Error: Missing Experiment 3 CSV files.")
+        print("Error: Missing Experiment 3 CSV files.")
         return
 
     # Load data
@@ -223,7 +223,7 @@ def generate_db_masking_analysis():
     opt_path = "results/Exp4_DB_Optimized_Detailed.csv"
 
     if not os.path.exists(vanilla_path) or not os.path.exists(opt_path):
-        print(f"❌ Error: Missing CSV files at {vanilla_path} or {opt_path}")
+        print(f"Error: Missing CSV files at {vanilla_path} or {opt_path}")
         return
 
     # Load and Filter Data
@@ -307,7 +307,7 @@ def generate_io_specific_plot():
     opt_summary = "results/Exp5_IO_Optimized_Summary.csv"
 
     if not all(os.path.exists(f) for f in [vanilla_detailed, opt_detailed]):
-        print("❌ Error: IO Experiment CSV files not found. Run the experiments first!")
+        print("Error: IO Experiment CSV files not found. Run the experiments first!")
         return
 
     # Load Data

@@ -12,7 +12,7 @@ def run_direct_baseline():
         ("FS_Direct_Baseline", "Walk the directory at '../workloads/single_step/mock_fs_payload'")
     ]
     
-    print("\n🚀 STARTING EXPERIMENT A: DIRECT BASELINES")
+    print("\nSTARTING EXPERIMENT A: DIRECT BASELINES")
     print("Bypassing LLM. Executing C++ kernels directly...\n")
     
     for test_name, prompt in workloads:
@@ -28,9 +28,9 @@ def run_direct_baseline():
             print(f"Executing: {test_name}...")
             response = requests.post(url, json=payload)
             response.raise_for_status()
-            print(f"✅ Success. Output:\n{response.json().get('response')}\n")
+            print(f"Success. Output:\n{response.json().get('response')}\n")
         except requests.exceptions.RequestException as e:
-            print(f"❌ Error on {test_name}: {e}")
+            print(f"Error on {test_name}: {e}")
 
 
 if __name__ == "__main__":

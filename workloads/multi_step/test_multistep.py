@@ -32,16 +32,16 @@ def run_multistep_test():
         "test_name": test_name
     }
     
-    print(f"\n🚀 Sending Request: {test_name}")
+    print(f"\nSending Request: {test_name}")
     print("⏳ Waiting for Agent to complete the multi-step loop...")
     
     try:
         response = requests.post(url, json=payload)
         response.raise_for_status()
-        print("\n✅ Final Agent Response:\n")
+        print("\nFinal Agent Response:\n")
         print(response.json().get("response"))
     except requests.exceptions.RequestException as e:
-        print(f"\n❌ Error connecting to server: {e}")
+        print(f"\nError connecting to server: {e}")
         if response is not None:
             print(f"Server specifically said: {response.text}")
 
