@@ -298,19 +298,115 @@ Aragog: Just-in-Time Model Routing for Scalable Serving of Agentic Workflows.
 \end{thebibliography}
 \endgroup
 
+
 \clearpage
+
 \appendix
+\section*{Appendices}
 \section{Member Contributions}
 % Required: Description of each project member’s contribution 
 % to the project code, report, and presentation.
 \begin{itemize}
-    \item \textbf{Kunpeng Zhang:} [Specific details here]
-    \item \textbf{Fazal Rehman:} [Specific details here]
-    \item \textbf{TJ Grewal:} [Specific details here]
+    \item \textbf{Kunpeng Zhang:}
+    \begin{itemize}
+        \item \textbf{Code:} Engineered the three primary C++ execution kernels (AST Math, DB Scan, FS Walk) and synthesized static workloads. Integrated PAPI with the Linux PMU for hardware telemetry. Implemented hardware optimizations (AVX2, prefetching, OpenMP) and developed the Python-to-C++ integration pipeline.
+        \item \textbf{Report:} Authored the \textit{Project Methodology} section, detailing system decoupling, microarchitectural telemetry integration, and kernel design.
+        \item \textbf{Presentation:} Presented the methodology, C++ tool implementation, and the technical details of the hardware optimizations applied.
+    \end{itemize}
+
+    \item \textbf{TJ Grewal:}
+    \begin{itemize}
+        \item \textbf{Code:} Architected the decoupled benchmarking harness to isolate the Python GIL from the compiled C++ execution environment and established the ``direct mode'' control baseline.
+        \item \textbf{Report:} Primary author for the \textit{Abstract}, \textit{Introduction}, and \textit{Background} sections. Conducted the literature review defining the Agentic Tax and modern LLM bottlenecks.
+        \item \textbf{Presentation:} Presented the project motivation, background on ReAct frameworks, and the conceptual system architecture.
+    \end{itemize}
+
+    \item \textbf{Fazal Rehman:}
+    \begin{itemize}
+        \item \textbf{Code:} Designed the data extraction and visualization scripts to synthesize raw hardware telemetry into latency and IPC graphs. Managed repository documentation and setup instructions.
+        \item \textbf{Report:} Primary author for the \textit{Evaluation Results}, \textit{Limitations}, and \textit{Conclusion} sections. Formulated the ``Masking Effect'' theory and diagnosed the OpenMP profiling artifacts.
+        \item \textbf{Presentation:} Presented the empirical findings, data visualizations, and concluded with the implications for future agentic architectures.
+    \end{itemize}
 \end{itemize}
 
 \section{Documentation and Code Instructions}
 % Provide high-level instructions on how to run your code 
 % (Environment setup, build commands, etc.).
+
+\noindent \textit{Note: For exhaustive documentation, including repository structure, raw data handling, and edge cases, please refer to the \texttt{README.md} located in the root of the submitted code repository. All experimental results (.csv) and generated figures (.png) have been pre-computed and retained in the \texttt{results/} directory for immediate review.}
+
+\subsection{Repository Access}
+\begin{itemize}
+    \item \textbf{Source Code:} https://github.com/AndyZzzZzzZzz/beyond-gpu-kernels
+\end{itemize}
+
+\subsection{System Prerequisites \& Environment Setup}
+\begin{itemize}
+    \item \textbf{Hardware:} GPU with $\ge$ 32GB VRAM (e.g., NVIDIA V100) to host the Qwen-2.5-7B model. Intel CPU with Performance Monitoring Unit (PMU) enabled.
+    \item \textbf{OS \& Permissions:} Linux OS. PAPI requires kernel-level access to hardware performance counters. You must enable \texttt{perf} access:
+    \begin{verbatim}
+    sudo sysctl -w kernel.perf_event_paranoid=-1
+    \end{verbatim}
+    \item \textbf{Dependencies:} \texttt{g++} (C++17), \texttt{libsqlite3-dev}, and \texttt{libpapi-dev}.
+\end{itemize}
+
+\noindent \textbf{Python Environment Setup:}
+\begin{verbatim}
+conda env create -f environment.yml
+conda activate beyond-gpu
+pip install torch transformers fastapi uvicorn requests pypapi 
+pip install matplotlib seaborn pandas numpy accelerate
+\end{verbatim}
+
+\subsection{Compiling the Native C++ Kernels}
+To capture accurate microarchitectural telemetry, both the baseline and hardware-optimized versions of the C++ tools must be compiled with strict hardware flags from the project root:
+
+\begin{verbatim}
+# 1. Compute-Bound (Baseline vs. AVX2 SIMD)
+g++ -O3 -march=native tools/calculator/evaluator.cpp \
+    -o tools/calculator/eval_baseline -lpapi -static-libstdc++
+g++ -O3 -march=native -mavx2 tools/calculator/evaluator.cpp \
+    -o tools/calculator/eval_avx2 -lpapi -static-libstdc++
+
+# 2. Memory-Bound (Baseline vs. Software Prefetching)
+g++ -O3 -march=native tools/db_retrieval/db_lookup_baseline.cpp \
+    -o tools/db_retrieval/db_lookup_baseline -lsqlite3 -lpapi 
+g++ -O3 -march=native tools/db_retrieval/db_lookup_scan_prefetch32.cpp \
+    -o tools/db_retrieval/db_lookup_scan_prefetch32 -lsqlite3 -lpapi
+
+# 3. I/O-Bound (Baseline vs. OpenMP Task Parallelism)
+g++ -O3 -march=native tools/io_walker/io_walker_baseline.cpp \
+    -o tools/io_walker/io_walker_baseline -lpapi
+g++ -O3 -march=native -fopenmp tools/io_walker/io_walker_omp.cpp \
+    -o tools/io_walker/io_walker_omp -lpapi
+\end{verbatim}
+
+\subsection{Execution Pipeline \& Reproduction}
+The testing harness strictly decouples the LLM orchestrator from the execution telemetry. Run the server in one terminal and execute the tests in another.
+
+\begin{verbatim}
+# Step 1: Start the Orchestration Server (Terminal 1)
+cd src
+python model_loader.py
+
+# Step 2: Generate Deterministic Stress Payloads (Terminal 2)
+cd workloads/single_step
+python generate_db_stress.py
+python generate_fs_stress.py
+python generate_math_stress.py
+
+# Step 3: Run the Agentic Evaluation Suite (Terminal 2)
+# Compares Direct C++ Execution vs. the LLM "Agentic Tax"
+python test_single_direct.py
+python test_single_llm.py
+
+# Step 4: Run Microarchitectural Optimization Tests (Examples)
+python test_exp3_llm_vanilla.py && python test_exp3_llm_optimized.py
+python test_exp4_db_vanilla.py && python test_exp4_db_optimized.py
+
+# Step 5: Generate Visualizations
+cd ../../
+python plots.py # Outputs saved to the /results directory
+\end{verbatim}
 
 \end{document}
