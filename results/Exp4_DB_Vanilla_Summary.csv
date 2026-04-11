@@ -1,0 +1,2 @@
+timestamp,test_name,prompt_length,tokens,cpu_time_ms,cycles,instructions,ipc,branch_misses,llc_misses
+2026-04-10 17:04:22,Exp4_DB_Vanilla,92,100,6357.24,731771459,928320983,1.269,9132190,11003029

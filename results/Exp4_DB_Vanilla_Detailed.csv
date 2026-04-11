@@ -1,0 +1,4 @@
+timestamp,test_name,step_number,phase,tool_name,cpu_time_ms,cycles,instructions,ipc,branch_misses,llc_misses
+2026-04-10 17:04:17,Exp4_DB_Vanilla,1,LLM_Framework_Overhead,None,22.91,47234172,77292850,1.636,151686,68605
+2026-04-10 17:04:19,Exp4_DB_Vanilla,1,Tool_Execution,query_database,0.0,677078892,840273069,1.241,8955179,10898011
+2026-04-10 17:04:22,Exp4_DB_Vanilla,2,LLM_Framework_Overhead,None,4.04,7458395,10755064,1.442,25325,36413
