@@ -107,7 +107,8 @@ AGENT_TOOLS = [
 # Allows you to test different C++ architectures/optimizations in your paper
 TOOL_VARIANT_BINARIES = {
     "evaluate_math_file": {"baseline": "calculator/eval_baseline", "avx2": "calculator/eval_avx2"},
-    "query_database": {"baseline": "db_retrieval/db_lookup_baseline", "scan": "db_retrieval/db_lookup_scan_baseline", "prefetch32": "db_retrieval/db_lookup_scan_prefetch32"}
+    "query_database": {"baseline": "db_retrieval/db_lookup_baseline", "scan": "db_retrieval/db_lookup_scan_baseline", "prefetch32": "db_retrieval/db_lookup_scan_prefetch32"},
+    "walk_directory": {"baseline": "io_walker/io_walker_baseline", "omp": "io_walker/io_walker_omp"}
 }
 
 def build_tool_plan_from_prompt(prompt: str) -> List[Dict[str, Dict[str, str]]]:
@@ -124,7 +125,6 @@ def run_tool(tool_name: str, args: Dict[str, str], tool_variants: Optional[Dict[
     
     # Resolve Path
     relative_path = TOOL_VARIANT_BINARIES.get(tool_name, {}).get(variant, f"{tool_name}_baseline")
-    if tool_name == "walk_directory": relative_path = "io_walker/io_walker_baseline" # Hardcode walker as it has no variants yet
     
     binary_path = os.path.abspath(f"../tools/{relative_path}")
     target_path = args.get("file_path") or args.get("dir_path") or args.get("db_path", "")
