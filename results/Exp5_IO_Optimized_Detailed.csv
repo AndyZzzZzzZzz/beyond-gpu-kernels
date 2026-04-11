@@ -1,0 +1,4 @@
+timestamp,test_name,step_number,phase,tool_name,cpu_time_ms,cycles,instructions,ipc,branch_misses,llc_misses
+2026-04-10 17:43:59,Exp5_IO_Optimized,1,LLM_Framework_Overhead,None,21.26,46323924,77329366,1.669,148305,53160
+2026-04-10 17:43:59,Exp5_IO_Optimized,1,Tool_Execution,walk_directory,0.0,76500510,10711414,0.14,1228,1540
+2026-04-10 17:44:03,Exp5_IO_Optimized,2,LLM_Framework_Overhead,None,2.11,7123542,10019127,1.406,24992,12443
