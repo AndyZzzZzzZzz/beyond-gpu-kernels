@@ -2,6 +2,7 @@
 #include <string>
 #include <sqlite3.h>
 #include <papi.h>
+#include <vector>
 
 int main(int argc, char* argv[]) {
     // Agent provides the database path via command line
@@ -20,13 +21,20 @@ int main(int argc, char* argv[]) {
     }
 
     // Force a full table scan bypassing indexes to thrash the LLC
-    const char* sql_query = "SELECT COUNT(*), SUM(LENGTH(log_message)) FROM server_logs WHERE log_message LIKE '%CRITICAL ERROR%';";
+    const char* sql_query = "SELECT log_message FROM server_logs;";
     sqlite3_stmt* stmt;
     
     if (sqlite3_prepare_v2(db, sql_query, -1, &stmt, nullptr) != SQLITE_OK) {
         std::cerr << "{\"error\": \"Failed to prepare statement: " << sqlite3_errmsg(db) << "\"}" << std::endl;
         sqlite3_close(db);
         return 1;
+    }
+
+    std::vector<std::string> logs;
+    // Extract all rows into memory
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const char* text = (const char*)sqlite3_column_text(stmt, 0);
+        if (text) logs.push_back(std::string(text));
     }
 
     long long match_count = 0;
@@ -45,13 +53,12 @@ int main(int argc, char* argv[]) {
 
     // --- MEMORY BOUND WORKLOAD ---
     // Execute the full table scan
-    int step_result = sqlite3_step(stmt);
-    if (step_result == SQLITE_ROW) {
-        match_count = sqlite3_column_int64(stmt, 0);
-        total_bytes_scanned = sqlite3_column_int64(stmt, 1);
-    } else if (step_result != SQLITE_DONE) {
-        // Handle execution error silently within JSON format
-        match_count = -1; 
+    for (size_t i = 0; i < logs.size(); i++) {
+        // Standard C++ string matching (no prefetching)
+        if (logs[i].find("CRITICAL ERROR") != std::string::npos) {
+            match_count++;
+            total_bytes_scanned += logs[i].length();
+        }
     }
 
     // --- PAPI STOP ---
