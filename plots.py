@@ -213,7 +213,240 @@ def generate_masking_plot():
     plt.savefig(output_png, dpi=300)
     print(f"📈 Success! Plot saved to {output_png}")
 
+
+def generate_db_masking_analysis():
+    """
+    Extracts metrics from Experiment 4 (Database Lookup) and generates 
+    a dual-panel paper-ready plot comparing Vanilla vs. Prefetch32.
+    """
+    vanilla_path = "results/Exp4_DB_Vanilla_Detailed.csv"
+    opt_path = "results/Exp4_DB_Optimized_Detailed.csv"
+
+    if not os.path.exists(vanilla_path) or not os.path.exists(opt_path):
+        print(f"❌ Error: Missing CSV files at {vanilla_path} or {opt_path}")
+        return
+
+    # Load and Filter Data
+    df_v = pd.read_csv(vanilla_path)
+    df_o = pd.read_csv(opt_path)
+
+    def get_detailed_metrics(df):
+        # Framework Overhead
+        fw = df[df['phase'] == 'LLM_Framework_Overhead']
+        fw_cycles = fw['cycles'].sum()
+        
+        # Tool Execution
+        tool = df[df['phase'] == 'Tool_Execution']
+        t_cycles = tool['cycles'].sum()
+        t_misses = tool['llc_misses'].sum()
+        t_inst = tool['instructions'].sum()
+        t_ipc = t_inst / t_cycles if t_cycles > 0 else 0
+        
+        return fw_cycles, t_cycles, t_misses, t_ipc
+
+    v_fw, v_t_cyc, v_t_miss, v_t_ipc = get_detailed_metrics(df_v)
+    o_fw, o_t_cyc, o_t_miss, o_t_ipc = get_detailed_metrics(df_o)
+
+    # Calculate percentages for the paper
+    miss_reduction = ((v_t_miss - o_t_miss) / v_t_miss) * 100
+    ipc_improvement = ((o_t_ipc - v_t_ipc) / v_t_ipc) * 100
+
+    # --- Start Plotting ---
+    sns.set_theme(style="whitegrid", font_scale=1.2)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+    labels = ['Vanilla\n(Baseline)', 'Optimized\n(Prefetch32)']
+
+    # Panel 1: The Masking Effect (Total Cycles Stacked)
+    fw_data = [v_fw, o_fw]
+    tool_data = [v_t_cyc, o_t_cyc]
+    
+    ax1.bar(labels, fw_data, label='LLM Framework Overhead', color='#4C72B0', edgecolor='black', alpha=0.9, width=0.5)
+    ax1.bar(labels, tool_data, bottom=fw_data, label='Tool Execution (DB Scan)', color='#C44E52', edgecolor='black', alpha=0.9, width=0.5)
+    
+    ax1.set_ylabel('CPU Cycles (Total)', fontweight='bold')
+    ax1.set_title('A. System-Level Masking Effect', fontsize=14, fontweight='bold', pad=15)
+    ax1.legend(loc='upper right', fontsize=10)
+
+    # Panel 2: Hardware Efficiency (L3 Misses and IPC)
+    # We use a dual y-axis for the second plot
+    ax2b = ax2.twinx()
+    
+    x = [0, 1]
+    width = 0.3
+    
+    bar1 = ax2.bar([p - width/2 for p in x], [v_t_miss, o_t_miss], width, label='L3 Cache Misses', color='#8172B3', edgecolor='black')
+    bar2 = ax2b.bar([p + width/2 for p in x], [v_t_ipc, o_t_ipc], width, label='Instructions Per Cycle (IPC)', color='#55A868', edgecolor='black')
+    
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(labels)
+    ax2.set_ylabel('L3 (LLC) Cache Misses', color='#8172B3', fontweight='bold')
+    ax2b.set_ylabel('Instructions Per Cycle (IPC)', color='#55A868', fontweight='bold')
+    ax2.set_title('B. Tool Microarchitectural Win', fontsize=14, fontweight='bold', pad=15)
+
+    # Annotations for Thesis Impact
+    #ax2.annotate(f'-{miss_reduction:.1f}% Misses', xy=(0.3, 0.7), xycoords='axes fraction', 
+    #             color='#8172B3', fontweight='bold', fontsize=11)
+    #ax2b.annotate(f'+{ipc_improvement:.1f}% IPC', xy=(0.7, 0.3), xycoords='axes fraction', 
+    #              color='#55A868', fontweight='bold', fontsize=11)
+
+    plt.tight_layout()
+    output_png = "results/Exp4_DB_Memory_Wall_Analysis.png"
+    plt.savefig(output_png, dpi=300)
+    print(f"📈 Success! Paper-ready plot saved to: {output_png}")
+
+
+def generate_io_specific_plot():
+    """
+    Extracts metrics from Experiment 5 (I/O Walker) and generates 
+    a dual-panel plot specifically comparing Baseline vs. OpenMP.
+    """
+    vanilla_detailed = "results/Exp5_IO_Vanilla_Detailed.csv"
+    opt_detailed = "results/Exp5_IO_Optimized_Detailed.csv"
+    vanilla_summary = "results/Exp5_IO_Vanilla_Summary.csv"
+    opt_summary = "results/Exp5_IO_Optimized_Summary.csv"
+
+    if not all(os.path.exists(f) for f in [vanilla_detailed, opt_detailed]):
+        print("❌ Error: IO Experiment CSV files not found. Run the experiments first!")
+        return
+
+    # Load Data
+    v_det = pd.read_csv(vanilla_detailed)
+    o_det = pd.read_csv(opt_detailed)
+    v_sum = pd.read_csv(vanilla_summary)
+    o_sum = pd.read_csv(opt_summary)
+
+    # Extract Tool Metrics
+    v_tool = v_det[v_det['phase'] == 'Tool_Execution'].iloc[0]
+    o_tool = o_det[o_det['phase'] == 'Tool_Execution'].iloc[0]
+
+    # Extract Summary Latency (Total Wall-clock time)
+    v_total_ms = v_sum['cpu_time_ms'].iloc[0]
+    o_total_ms = o_sum['cpu_time_ms'].iloc[0]
+
+    # --- Start Plotting ---
+    sns.set_theme(style="whitegrid", font_scale=1.2)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+    labels = ['Baseline\n(Single-Thread)', 'Optimized\n(OpenMP)']
+
+    # Panel A: Wall-Clock Latency (Speedup)
+    # Note: We use the summary time to show what the user actually experiences
+    latency_data = [v_total_ms, o_total_ms]
+    sns.barplot(x=labels, y=latency_data, ax=ax1, palette="Reds_r", edgecolor='black')
+    ax1.set_ylabel('Total Request Latency (ms)', fontweight='bold')
+    ax1.set_title('A. End-to-End Latency Speedup', fontsize=14, fontweight='bold', pad=15)
+    
+    speedup = ((v_total_ms - o_total_ms) / v_total_ms) * 100
+    ax1.annotate(f'{speedup:.1f}% Faster', xy=(0.5, 0.5), xycoords='axes fraction', 
+                 ha='center', fontsize=12, fontweight='bold', color='darkred',
+                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="darkred", lw=2))
+
+    # Panel B: Microarchitectural Efficiency (IPC)
+    # Even if total cycles change, IPC shows how "busy" we kept the cores
+    ipc_data = [v_tool['ipc'], o_tool['ipc']]
+    sns.barplot(x=labels, y=ipc_data, ax=ax2, palette="Blues_d", edgecolor='black')
+    ax2.set_ylabel('Instructions Per Cycle (IPC)', fontweight='bold')
+    ax2.set_title('B. Threading Efficiency (IPC)', fontsize=14, fontweight='bold', pad=15)
+
+    plt.tight_layout()
+    output_png = "results/Exp5_IO_Detailed_Comparison.png"
+    plt.savefig(output_png, dpi=300)
+    print(f"📈 Success! IO-specific plot saved to: {output_png}")
+
+
+def generate_agentic_tax_viz():
+    """
+    Consolidates results from Experiments 3, 4, and 5 to demonstrate 
+    the "Masking Effect" across all tool-call classes.
+    """
+    # Mapping of experiment results
+    experiments = {
+        "Compute (Math)": ("Exp3_LLM_Vanilla_Detailed.csv", "Exp3_LLM_Optimized_Detailed.csv"),
+        "Memory (DB)": ("Exp4_DB_Vanilla_Detailed.csv", "Exp4_DB_Optimized_Detailed.csv"),
+        "I/O (Filesystem)": ("Exp5_IO_Vanilla_Detailed.csv", "Exp5_IO_Optimized_Detailed.csv")
+    }
+
+    results = []
+
+    for label, (v_file, o_file) in experiments.items():
+        v_path, o_path = f"results/{v_file}", f"results/{o_file}"
+        if not os.path.exists(v_path) or not os.path.exists(o_path):
+            print(f"⚠️ Skipping {label}: Files not found.")
+            continue
+
+        for path, variant in [(v_path, "Vanilla"), (o_path, "Optimized")]:
+            df = pd.read_csv(path)
+            
+            # Framework vs Tool Cycles
+            fw_cycles = df[df['phase'] == 'LLM_Framework_Overhead']['cycles'].sum()
+            tool_df = df[df['phase'] == 'Tool_Execution']
+            tool_cycles = tool_df['cycles'].sum()
+            
+            # Efficiency Metric (IPC)
+            tool_inst = tool_df['instructions'].sum()
+            ipc = tool_inst / tool_cycles if tool_cycles > 0 else 0
+
+            results.append({
+                "Category": label,
+                "Variant": variant,
+                "Framework Cycles": fw_cycles,
+                "Tool Cycles": tool_cycles,
+                "Total Cycles": fw_cycles + tool_cycles,
+                "Tool IPC": ipc
+            })
+
+    df_final = pd.DataFrame(results)
+
+    # --- Plotting ---
+    sns.set_theme(style="whitegrid", font_scale=1.1)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
+
+    # Plot 1: The Global Masking Effect (Stacked Bars)
+    # We pivot to get Categories on X and Framework/Tool as stacks
+    pivot_df = df_final.copy()
+    
+    # We'll plot Vanilla and Optimized side-by-side per category
+    categories = df_final['Category'].unique()
+    x = range(len(categories))
+    width = 0.35
+
+    for i, var in enumerate(["Vanilla", "Optimized"]):
+        sub = df_final[df_final['Variant'] == var]
+        offset = (i - 0.5) * width
+        
+        ax1.bar([p + offset for p in x], sub['Framework Cycles'], width, 
+                label=f'{var} Framework' if i==0 else "", color='#4C72B0', alpha=0.6 if i==1 else 1.0, edgecolor='black')
+        ax1.bar([p + offset for p in x], sub['Tool Cycles'], width, 
+                bottom=sub['Framework Cycles'], label=f'{var} Tool' if i==0 else "", 
+                color='#C44E52', alpha=0.6 if i==1 else 1.0, edgecolor='black')
+
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(categories)
+    ax1.set_ylabel('CPU Cycles (Billions)')
+    ax1.set_title('A. System-Level Cycle Distribution\n(Framework Overhead vs. Tool Kernel)', fontweight='bold')
+    
+    # Custom legend to clarify Vanilla vs Optimized
+    from matplotlib.lines import Line2D
+    custom_lines = [Line2D([0], [0], color='#4C72B0', lw=4),
+                    Line2D([0], [0], color='#C44E52', lw=4),
+                    Line2D([0], [0], color='gray', lw=4, alpha=1.0),
+                    Line2D([0], [0], color='gray', lw=4, alpha=0.5)]
+    ax1.legend(custom_lines, ['Framework Tax', 'Tool Execution', 'Vanilla Run', 'Optimized Run'], loc='upper left', fontsize=9)
+
+    # Plot 2: The Microarchitectural Win (IPC Improvement)
+    sns.barplot(data=df_final, x='Category', y='Tool IPC', hue='Variant', ax=ax2, palette="Greens_d", edgecolor='black')
+    ax2.set_title('B. Tool Microarchitectural Efficiency\n(Instructions Per Cycle)', fontweight='bold')
+    ax2.set_ylabel('IPC (Higher is Better)')
+
+    plt.tight_layout()
+    plt.savefig("results/Final_Research_Comparison.png", dpi=300)
+    print("📈 Final research plot generated: results/Final_Research_Comparison.png")
+
 if __name__ == "__main__":
-    generate_masking_plot()
+    #generate_masking_plot()
+    #generate_db_masking_analysis()
+    generate_io_specific_plot()
+    #generate_agentic_tax_viz()
 
     
