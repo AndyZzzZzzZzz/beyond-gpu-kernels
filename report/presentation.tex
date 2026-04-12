@@ -3,67 +3,104 @@
 % --- Packages ---
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{lmodern}
 \usepackage{graphicx}
-\usepackage{booktabs}
+
 \usepackage{amsmath}
 \usepackage{xcolor}
 \usepackage{tikz}
-\usetikzlibrary{positioning, arrows.meta}
-\usepackage{multirow}
+\usetikzlibrary{positioning, arrows.meta, calc}
 
-% --- Theme (Green) ---
-\usetheme{Madrid}
-\usecolortheme{seahorse}
+% Using default Computer Modern fonts for pdflatex compatibility
 
-% Custom green palette
-\definecolor{deepgreen}{RGB}{27, 94, 32}
-\definecolor{midgreen}{RGB}{46, 125, 50}
-\definecolor{lightgreen}{RGB}{200, 230, 201}
-\definecolor{accentorange}{RGB}{239, 108, 0}
-\definecolor{accentred}{RGB}{198, 40, 40}
-\definecolor{accentblue}{RGB}{21, 101, 192}
-\definecolor{accentyellow}{RGB}{255, 179, 0}
-\definecolor{softgrey}{RGB}{66, 66, 66}
+% --- Theme (Abstract Black) ---
+\usetheme{default}
+\usecolortheme{default}
 
-\setbeamercolor{structure}{fg=deepgreen}
-\setbeamercolor{palette primary}{bg=deepgreen, fg=white}
-\setbeamercolor{palette secondary}{bg=midgreen, fg=white}
-\setbeamercolor{palette tertiary}{bg=deepgreen, fg=white}
-\setbeamercolor{frametitle}{bg=deepgreen, fg=white}
-\setbeamercolor{title}{bg=deepgreen, fg=white}
-\setbeamercolor{author}{fg=deepgreen}
-\setbeamercolor{institute}{fg=midgreen}
-\setbeamercolor{block title}{bg=midgreen, fg=white}
-\setbeamercolor{block body}{bg=lightgreen!50, fg=black}
-\setbeamercolor{block title alerted}{bg=accentred, fg=white}
-\setbeamercolor{block title example}{bg=accentblue, fg=white}
-\setbeamercolor{item}{fg=deepgreen}
-\setbeamercolor{subitem}{fg=midgreen}
-\setbeamercolor{section in toc}{fg=deepgreen}
+% Dark monochromatic palette with neon accents
+\definecolor{void}{RGB}{8, 8, 12}
+\definecolor{abyss}{RGB}{16, 16, 22}
+\definecolor{slate}{RGB}{28, 28, 36}
+\definecolor{ash}{RGB}{55, 55, 68}
+\definecolor{mist}{RGB}{160, 160, 175}
+\definecolor{bone}{RGB}{220, 220, 228}
+\definecolor{neonmint}{RGB}{0, 255, 180}
+\definecolor{neonviolet}{RGB}{160, 80, 255}
+\definecolor{neonpink}{RGB}{255, 60, 120}
+\definecolor{neonamber}{RGB}{255, 190, 40}
+\definecolor{neonice}{RGB}{80, 200, 255}
 
+\setbeamercolor{normal text}{fg=bone, bg=void}
+\setbeamercolor{structure}{fg=neonmint}
+\setbeamercolor{palette primary}{bg=void, fg=bone}
+\setbeamercolor{palette secondary}{bg=abyss, fg=bone}
+\setbeamercolor{palette tertiary}{bg=slate, fg=bone}
+\setbeamercolor{frametitle}{bg=, fg=bone}
+\setbeamercolor{title}{fg=bone}
+\setbeamercolor{subtitle}{fg=neonmint}
+\setbeamercolor{author}{fg=mist}
+\setbeamercolor{institute}{fg=ash}
+\setbeamercolor{block title}{bg=slate, fg=neonmint}
+\setbeamercolor{block body}{bg=abyss, fg=bone}
+\setbeamercolor{block title alerted}{bg=slate, fg=neonpink}
+\setbeamercolor{block body alerted}{bg=abyss, fg=bone}
+\setbeamercolor{block title example}{bg=slate, fg=neonice}
+\setbeamercolor{block body example}{bg=abyss, fg=bone}
+\setbeamercolor{item}{fg=neonmint}
+\setbeamercolor{subitem}{fg=mist}
+\setbeamercolor{section in toc}{fg=bone}
+
+% Remove ALL navigation and footers
 \setbeamertemplate{navigation symbols}{}
-\setbeamertemplate{itemize item}{\color{deepgreen}$\blacktriangleright$}
-\setbeamertemplate{itemize subitem}{\color{midgreen}$\bullet$}
+\setbeamertemplate{footline}{}
+\setbeamertemplate{headline}{}
 
-% Footer customization
-\setbeamertemplate{footline}{%
-  \leavevmode%
-  \hbox{%
-  \begin{beamercolorbox}[wd=.32\paperwidth,ht=2.5ex,dp=1ex,center]{palette primary}%
-    \usebeamerfont{author in head/foot}Zhang, Grewal, Rehman%
-  \end{beamercolorbox}%
-  \begin{beamercolorbox}[wd=.46\paperwidth,ht=2.5ex,dp=1ex,center]{palette secondary}%
-    \usebeamerfont{title in head/foot}Beyond the GPU: Microarchitectural Analysis%
-  \end{beamercolorbox}%
-  \begin{beamercolorbox}[wd=.22\paperwidth,ht=2.5ex,dp=1ex,right]{palette primary}%
-    \usebeamerfont{date in head/foot}SFU \hspace*{1ex}\insertframenumber{}/\inserttotalframenumber\hspace*{2ex}
-  \end{beamercolorbox}}%
-  \vskip0pt%
+% Minimal frame title
+\setbeamertemplate{frametitle}{%
+  \vspace{0.6em}%
+  \noindent\hspace{0.5em}%
+  {\large\bfseries\insertframetitle}%
+  \vspace{-0.2em}%
+  \par\noindent\hspace{0.5em}%
+  \textcolor{neonmint}{\rule{2.5cm}{0.8pt}}%
+  \vspace{0.3em}%
 }
 
+% Custom itemize markers
+\setbeamertemplate{itemize item}{\color{neonmint}\tiny$\blacksquare$}
+\setbeamertemplate{itemize subitem}{\color{ash}---}
+
+% Blocks with left border accent
+\setbeamertemplate{block begin}{%
+  \vspace{0.3em}%
+  \begin{beamercolorbox}[leftskip=0.4em, sep=0.5em, rounded=false]{block title}%
+    \usebeamerfont{block title}\insertblocktitle%
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[leftskip=0.4em, sep=0.5em, rounded=false]{block body}%
+}
+\setbeamertemplate{block end}{\end{beamercolorbox}\vspace{0.3em}}
+
+\setbeamertemplate{block alerted begin}{%
+  \vspace{0.3em}%
+  \begin{beamercolorbox}[leftskip=0.4em, sep=0.5em]{block title alerted}%
+    \usebeamerfont{block title}\insertblocktitle%
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[leftskip=0.4em, sep=0.5em]{block body alerted}%
+}
+\setbeamertemplate{block alerted end}{\end{beamercolorbox}\vspace{0.3em}}
+
+\setbeamertemplate{block example begin}{%
+  \vspace{0.3em}%
+  \begin{beamercolorbox}[leftskip=0.4em, sep=0.5em]{block title example}%
+    \usebeamerfont{block title}\insertblocktitle%
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[leftskip=0.4em, sep=0.5em]{block body example}%
+}
+\setbeamertemplate{block example end}{\end{beamercolorbox}\vspace{0.3em}}
+
 % --- Title Page Info ---
-\title[Beyond the GPU]{Beyond the GPU: A Microarchitectural Analysis \\ of LLM Tool-Calling Kernels}
-\subtitle{Quantifying the Agentic Tax}
+\title[Beyond the GPU]{Beyond the GPU}
+\subtitle{A Microarchitectural Analysis of LLM Tool-Calling Kernels}
 \author[Zhang, Grewal, Rehman]{Kunpeng Zhang \and TJ Grewal \and Fazal Rehman}
 \institute[SFU]{Simon Fraser University \\ \texttt{\{kza63, tga47, fra22\}@sfu.ca}}
 \date{\today}
@@ -74,26 +111,40 @@
 % SLIDE 1: TITLE
 % =================================================================
 \begin{frame}[plain]
-  \titlepage
-  \begin{center}
-    \small \textcolor{midgreen}{\textit{What happens when the CPU becomes the bottleneck for AI?}}
-  \end{center}
+  \begin{tikzpicture}[remember picture, overlay]
+    % Abstract decorative elements
+    \fill[neonmint, opacity=0.04] (current page.north west) ++(-1,-1) circle (8cm);
+    \fill[neonviolet, opacity=0.03] (current page.south east) ++(2,2) circle (10cm);
+    \draw[neonmint, opacity=0.15, line width=0.3pt] (current page.north west) ++(1.2,-3) -- ++(14,0);
+    \draw[neonmint, opacity=0.08, line width=0.3pt] (current page.north west) ++(1.2,-3.3) -- ++(9,0);
+  \end{tikzpicture}
+  \vspace{2.5cm}
+  \begin{flushleft}
+    \hspace{1.5em}{\Huge\bfseries\textcolor{bone}{Beyond the GPU}}\\[0.4em]
+    \hspace{1.5em}{\small\textcolor{neonmint}{A Microarchitectural Analysis of LLM Tool-Calling Kernels}}\\[1.8em]
+    \hspace{1.5em}{\footnotesize\textcolor{mist}{Kunpeng Zhang \quad\textcolor{ash}{/}\quad TJ Grewal \quad\textcolor{ash}{/}\quad Fazal Rehman}}\\[0.3em]
+    \hspace{1.5em}{\scriptsize\textcolor{ash}{Simon Fraser University}}\\[2em]
+    \hspace{1.5em}{\scriptsize\textcolor{ash}{\textit{What happens when the CPU becomes the bottleneck for AI?}}}
+  \end{flushleft}
 \end{frame}
 
 % =================================================================
 % SLIDE 2: Outline
 % =================================================================
 \begin{frame}{Outline}
+  \begin{tikzpicture}[remember picture, overlay]
+    \fill[neonviolet, opacity=0.02] (current page.south west) ++(0,0) circle (6cm);
+  \end{tikzpicture}
   \begin{columns}
     \begin{column}{0.5\textwidth}
-      \textcolor{deepgreen}{\textbf{Part I -- TJ Grewal}}
+      \textcolor{neonmint}{\textbf{Part I -- TJ Grewal}}
       \begin{enumerate}
         \item Motivation \& The Agentic Shift
         \item Background: ReAct \& Tool-Calling
         \item Research Questions
       \end{enumerate}
       \vspace{0.6em}
-      \textcolor{deepgreen}{\textbf{Part II -- Kunpeng Zhang}}
+      \textcolor{neonviolet}{\textbf{Part II -- Kunpeng Zhang}}
       \begin{enumerate}
         \setcounter{enumi}{3}
         \item Decoupled System Architecture
@@ -102,7 +153,7 @@
       \end{enumerate}
     \end{column}
     \begin{column}{0.5\textwidth}
-      \textcolor{deepgreen}{\textbf{Part III -- Fazal Rehman}}
+      \textcolor{neonpink}{\textbf{Part III -- Fazal Rehman}}
       \begin{enumerate}
         \setcounter{enumi}{6}
         \item Quantifying the Agentic Tax
@@ -126,7 +177,7 @@
       \begin{itemize}
         \item LLMs are rapidly evolving from \textbf{static chat interfaces} into \textbf{autonomous agents}.
         \item Modern agents \textit{reason}, \textit{call tools}, \textit{parse results}, and \textit{iterate}.
-        \item Historical optimization focus: \textcolor{accentorange}{\textbf{GPU forward-pass}}
+        \item Historical optimization focus: \textcolor{neonamber}{\textbf{GPU forward-pass}}
         \begin{itemize}
           \item Time-To-First-Token (TTFT)
           \item Inter-token latency
@@ -159,13 +210,13 @@
         \item Repeat until the task is complete
       \end{enumerate}
       \vspace{0.4em}
-      \textcolor{accentred}{\textbf{This loop is strictly serial.}}
+      \textcolor{neonpink}{\textbf{This loop is strictly serial.}}
     \end{column}
     \begin{column}{0.45\textwidth}
       \begin{tikzpicture}[node distance=0.55cm, font=\scriptsize]
-        \tikzstyle{box}=[draw=deepgreen, thick, rounded corners, fill=lightgreen!40,
-                          minimum width=3.3cm, minimum height=0.6cm, text centered]
-        \tikzstyle{arrow}=[->, thick, deepgreen]
+        \tikzstyle{box}=[draw=neonmint, thick, rounded corners=1pt, fill=slate,
+                          minimum width=3.3cm, minimum height=0.6cm, text centered, text=bone]
+        \tikzstyle{arrow}=[->, thick, neonmint]
         \node[box] (llm) {LLM (GPU): emit JSON};
         \node[box, below=of llm] (parse) {Python: parse \& validate};
         \node[box, below=of parse] (exec) {C++ tool: execute};
@@ -173,8 +224,8 @@
         \draw[arrow] (llm) -- (parse);
         \draw[arrow] (parse) -- (exec);
         \draw[arrow] (exec) -- (inject);
-        \draw[arrow, accentred] (inject.east) .. controls +(1.5,1) and +(1.5,-1) .. (llm.east)
-              node[midway, right, xshift=2pt, text=accentred] {loop};
+        \draw[arrow, neonpink] (inject.east) .. controls +(1.5,1) and +(1.5,-1) .. (llm.east)
+              node[midway, right, xshift=2pt, text=neonpink] {loop};
       \end{tikzpicture}
     \end{column}
   \end{columns}
@@ -205,7 +256,7 @@
   \end{columns}
   \vspace{1em}
   \begin{center}
-    \textcolor{deepgreen}{\textbf{Agent tools are fundamentally hostile to GPU architectures.}}
+    \textcolor{neonmint}{\textbf{Agent tools are fundamentally hostile to GPU architectures.}}
   \end{center}
 \end{frame}
 
@@ -220,9 +271,9 @@
 
   \textbf{Our three contributions:}
   \begin{enumerate}
-    \item \textcolor{deepgreen}{\textbf{Quantification of the Agentic Tax:}} up to $\mathbf{69.5\times}$ slowdown on lightweight tools.
-    \item \textcolor{deepgreen}{\textbf{Microarchitectural characterization}} of compute-, memory-, and I/O-bound agent tools.
-    \item \textcolor{deepgreen}{\textbf{Identification of the Masking Effect:}} kernel-level wins rendered statistically invisible at the system level.
+    \item \textcolor{neonmint}{\textbf{Quantification of the Agentic Tax:}} up to $\mathbf{69.5\times}$ slowdown on lightweight tools.
+    \item \textcolor{neonviolet}{\textbf{Microarchitectural characterization}} of compute-, memory-, and I/O-bound agent tools.
+    \item \textcolor{neonpink}{\textbf{Identification of the Masking Effect:}} kernel-level wins rendered statistically invisible at the system level.
   \end{enumerate}
 \end{frame}
 
@@ -256,7 +307,7 @@
   \end{columns}
   \vspace{0.5em}
   \begin{center}
-    \textcolor{midgreen}{\textbf{Model:} Qwen2.5-7B-Instruct (FP16 + SDPA), \texttt{do\_sample=False}}
+    \textcolor{mist}{\textbf{Model:} Qwen2.5-7B-Instruct (FP16 + SDPA), \texttt{do\_sample=False}}
   \end{center}
 \end{frame}
 
@@ -277,8 +328,8 @@
     \begin{column}{0.5\textwidth}
       \textbf{Windowing strategy:}
       \begin{itemize}
-        \item \textcolor{deepgreen}{\textbf{CPU Window 1:}} prompt assembly + tokenization
-        \item \textcolor{deepgreen}{\textbf{CPU Window 2:}} decoding + JSON extraction
+        \item \textcolor{neonmint}{\textbf{CPU Window 1:}} prompt assembly + tokenization
+        \item \textcolor{neonviolet}{\textbf{CPU Window 2:}} decoding + JSON extraction
       \end{itemize}
       \vspace{0.4em}
       \begin{exampleblock}{Testbed}
@@ -327,7 +378,7 @@
   \end{columns}
   \vspace{0.8em}
   \begin{center}
-    \textcolor{deepgreen}{\textbf{Each kernel manages its own PAPI profiling around the core workload.}}
+    \textcolor{neonmint}{\textbf{Each kernel manages its own PAPI profiling around the core workload.}}
   \end{center}
 \end{frame}
 
@@ -358,8 +409,8 @@
         \end{itemize}
       \end{alertblock}
       \begin{center}
-        \textcolor{deepgreen}{\textbf{Direct vs. Agentic}}\\
-        \small = the Agentic Tax
+        \textcolor{neonmint}{\textbf{Direct vs. Agentic}}\\
+        \small\textcolor{mist}{= the Agentic Tax}
       \end{center}
     \end{column}
   \end{columns}
@@ -388,7 +439,7 @@
   \end{columns}
   \vspace{0.6em}
   \begin{center}
-    \textcolor{deepgreen}{\textbf{Do these optimizations matter in an agentic context?}}
+    \textcolor{neonamber}{\textbf{Do these optimizations matter in an agentic context?}}
   \end{center}
 \end{frame}
 
@@ -403,7 +454,7 @@
   \end{center}
   \vspace{-0.4em}
   \begin{center}
-    \small \textcolor{softgrey}{Log-scale latency: Direct C++ vs. Full Agentic Loop across three workload classes.}
+    \small \textcolor{ash}{Log-scale latency: Direct C++ vs. Full Agentic Loop across three workload classes.}
   \end{center}
 \end{frame}
 
@@ -411,10 +462,10 @@
   \begin{columns}
     \begin{column}{0.55\textwidth}
       \begin{itemize}
-        \item \textcolor{accentred}{\textbf{I/O walker:} $69.5\times$ slowdown}\\
+        \item \textcolor{neonpink}{\textbf{I/O walker:} $69.5\times$ slowdown}\\
               \small Native: $\sim$15 ms $\rightarrow$ Agentic: $\sim$1 s
-        \item \textcolor{accentorange}{\textbf{AST math:} $14.9\times$ slowdown}
-        \item \textcolor{accentblue}{\textbf{DB scan:} only $2.4\times$ slowdown}\\
+        \item \textcolor{neonamber}{\textbf{AST math:} $14.9\times$ slowdown}
+        \item \textcolor{neonice}{\textbf{DB scan:} only $2.4\times$ slowdown}\\
               \small $\sim$764 ms native, Agentic tax amortized
       \end{itemize}
       \vspace{0.5em}
@@ -428,7 +479,7 @@
       \end{block}
       \vspace{0.4em}
       \begin{center}
-        \textcolor{deepgreen}{\textbf{For most tools, the framework dominates execution time.}}
+        \textcolor{neonmint}{\textbf{For most tools, the framework dominates execution time.}}
       \end{center}
     \end{column}
   \end{columns}
@@ -441,7 +492,7 @@
   \end{center}
   \vspace{-0.4em}
   \begin{center}
-    \small \textcolor{softgrey}{(Left) Framework vs. tool instruction volume. (Right) IPC gap between Python and native C++.}
+    \small \textcolor{ash}{(Left) Framework vs. tool instruction volume. (Right) IPC gap between Python and native C++.}
   \end{center}
 \end{frame}
 
@@ -473,7 +524,7 @@
   \end{columns}
   \vspace{0.3em}
   \begin{center}
-    \textcolor{accentred}{\textbf{LLM coordination overhead is a compounding tax that scales with autonomy.}}
+    \textcolor{neonpink}{\textbf{LLM coordination overhead is a compounding tax that scales with autonomy.}}
   \end{center}
 \end{frame}
 
@@ -530,7 +581,7 @@
   \end{center}
   \vspace{-0.4em}
   \begin{center}
-    \textcolor{accentred}{\textbf{Kernel-level wins are rendered statistically invisible to the end user.}}
+    \textcolor{neonpink}{\textbf{Kernel-level wins are rendered statistically invisible to the end user.}}
   \end{center}
 \end{frame}
 
@@ -576,23 +627,33 @@
 
   \vspace{0.4em}
   \begin{center}
-    \textcolor{deepgreen}{\textbf{Until the orchestration layer is treated as a high-performance data plane,\\
+    \textcolor{neonmint}{\textbf{Until the orchestration layer is treated as a high-performance data plane,\\
     the promise of agentic AI will remain masked by its own framework.}}
   \end{center}
 \end{frame}
 
 \begin{frame}[plain]
+  \begin{tikzpicture}[remember picture, overlay]
+    % Abstract decorative geometry
+    \draw[neonmint, opacity=0.12, line width=0.4pt] (current page.center) ++(-5,2) -- ++(10,0);
+    \draw[neonviolet, opacity=0.08, line width=0.4pt] (current page.center) ++(-3,1.6) -- ++(6,0);
+    \draw[neonpink, opacity=0.06, line width=0.4pt] (current page.center) ++(-7,-2) -- ++(14,0);
+    \fill[neonmint, opacity=0.03] (current page.south west) ++(3,1) circle (5cm);
+    \fill[neonviolet, opacity=0.02] (current page.north east) ++(-2,-2) circle (7cm);
+  \end{tikzpicture}
   \begin{center}
-    \vspace{1.5em}
-    {\Huge \textcolor{deepgreen}{\textbf{Thank You}}}\\
     \vspace{2em}
-    \textcolor{midgreen}{\textbf{Beyond the GPU:}} \\
-    \textit{A Microarchitectural Analysis of LLM Tool-Calling Kernels}\\
+    {\Huge\textcolor{bone}{\textbf{Thank You}}}\\
+    \vspace{1.5em}
+    \textcolor{neonmint}{\rule{4cm}{0.6pt}}\\
     \vspace{1em}
-    \small Kunpeng Zhang \quad $\cdot$ \quad TJ Grewal \quad $\cdot$ \quad Fazal Rehman\\
-    \small Simon Fraser University\\
+    {\small\textcolor{mist}{Beyond the GPU:}}\\
+    {\small\textit{\textcolor{ash}{A Microarchitectural Analysis of LLM Tool-Calling Kernels}}}\\
     \vspace{1em}
-    \footnotesize \texttt{https://github.com/AndyZzzZzzZzz/beyond-gpu-kernels}
+    {\footnotesize\textcolor{ash}{Kunpeng Zhang \quad$\cdot$\quad TJ Grewal \quad$\cdot$\quad Fazal Rehman}}\\
+    {\scriptsize\textcolor{ash}{Simon Fraser University}}\\
+    \vspace{0.8em}
+    {\scriptsize\textcolor{ash}{\texttt{github.com/AndyZzzZzzZzz/beyond-gpu-kernels}}}
   \end{center}
 \end{frame}
 
