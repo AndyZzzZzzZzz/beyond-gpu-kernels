@@ -39,21 +39,21 @@
 \maketitle
 
 \begin{abstract}
-\noindent As Large Language Models (LLMs) evolve from static chat interfaces into autonomous agents, the computational bottleneck is rapidly shifting from the GPU forward-pass to CPU-bound tool orchestration. Agentic workflows rely heavily on serial, branch-heavy, and I/O-bound tasks---such as JSON parsing, database lookups, and filesystem traversal---which behave more like traditional datacenter Remote Procedure Calls (RPC) than highly parallel machine learning kernels. In this paper, we introduce a decoupled microarchitectural profiling framework utilizing hardware performance counters (PAPI) to isolate and quantify the "Agentic Tax": the systemic overhead imposed by LLM orchestration frameworks. We evaluate compute, memory, and I/O-bound C++ execution kernels, demonstrating that Python-based orchestration and JSON serialization induce latency penalties up to $69.5\times$ compared to native execution[cite: 70, 71]. Furthermore, we apply classical hardware optimizations---including SIMD vectorization (AVX2), software prefetching, and OpenMP concurrency---to the tool kernels. While software prefetching successfully yielded a $14.2\%$ IPC improvement at the kernel level [cite: 215], the end-to-end system speedup remained below $1\%$[cite: 222]. We term this phenomenon the Masking Effect: the execution bloat of the orchestration layer is so massive that it effectively nullifies microarchitectural hardware optimizations[cite: 224]. Ultimately, we argue that the future of agentic AI requires treating the orchestration layer as a high-performance networking data plane.
+\noindent As Large Language Models (LLMs) evolve from static chat interfaces into autonomous agents, the computational bottleneck is rapidly shifting from the GPU forward-pass to CPU-bound tool orchestration. Agentic workflows rely heavily on serial, branch-heavy, and I/O-bound tasks---such as JSON parsing, database lookups, and filesystem traversal---which behave more like traditional datacenter Remote Procedure Calls (RPC) than highly parallel machine learning kernels. In this paper, we introduce a decoupled microarchitectural profiling framework utilizing hardware performance counters (PAPI) to isolate and quantify the "Agentic Tax": the systemic overhead imposed by LLM orchestration frameworks. We evaluate compute, memory, and I/O-bound C++ execution kernels, demonstrating that Python-based orchestration and JSON serialization induce latency penalties up to $69.5\times$ compared to native execution. Furthermore, we apply classical hardware optimizations---including SIMD vectorization (AVX2), software prefetching, and OpenMP concurrency---to the tool kernels. While software prefetching successfully yielded a $14.2\%$ IPC improvement at the kernel level, the end-to-end system speedup remained below $1\%$. We term this phenomenon the Masking Effect: the execution bloat of the orchestration layer is so massive that it effectively nullifies microarchitectural hardware optimizations. Ultimately, we argue that the future of agentic AI requires treating the orchestration layer as a high-performance networking data plane.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:introduction}
 
-With the rapid proliferation of autonomous AI agents, the software industry is increasingly deploying these systems to automate complex engineering workflows[cite: 323]. Historically, optimization efforts within the Generative AI ecosystem have overwhelmingly focused on accelerating the GPU forward-pass[cite: 324]. However, as Large Language Models (LLMs) transition from passive text generators to active agents, the execution bottleneck shifts abruptly from the accelerator back to the host CPU[cite: 325]. \\
+With the rapid proliferation of autonomous AI agents, the software industry is increasingly deploying these systems to automate complex engineering workflows. Historically, optimization efforts within the Generative AI ecosystem have overwhelmingly focused on accelerating the GPU forward-pass, minimizing Time-To-First-Token (TTFT) and inter-token latency~\cite{data_systems, sutradhara}. However, as Large Language Models (LLMs) transition from passive text generators to active agents, the execution bottleneck shifts abruptly from the accelerator back to the host CPU~\cite{cpu_centric}. \\
 
-\noindent Despite this growing reliance on tool-augmented LLMs, current literature often treats the tool-execution pipeline as a black box, measuring only high-level wall-clock latency without isolating the underlying hardware penalties[cite: 330]. To address this gap, this paper presents a first-principles microarchitectural characterization of the CPU-side execution pipeline. We designed a custom, decoupled benchmarking harness that strictly separates the Python-based LLM orchestrator from compiled, native C++ execution kernels[cite: 332, 334]. \\
+\noindent Despite this growing reliance on tool-augmented LLMs, current literature often treats the tool-execution pipeline as a black box, measuring only high-level wall-clock latency without isolating the underlying hardware penalties~\cite{ai_nativebench}. To address this gap, this paper presents a first-principles microarchitectural characterization of the CPU-side execution pipeline. We designed a custom, decoupled benchmarking harness that strictly separates the Python-based LLM orchestrator from compiled, native C++ execution kernels. \\
 
 \noindent Our contributions are threefold:
 \begin{enumerate}
-    \item \textbf{Quantification of the Agentic Tax:} We demonstrate that the combined GPU/CPU overhead of LLM orchestration imposes a massive latency penalty, slowing down lightweight tools by up to $69.5\times$ compared to native execution[cite: 337].
-    \item \textbf{Microarchitectural Characterization:} We map specific tool classes to their defining hardware bottlenecks, revealing how multi-step agentic loops compound CPU inefficiency through context accumulation[cite: 338].
-    \item \textbf{Identification of the Masking Effect:} We prove that while classical hardware optimizations (AVX2, prefetching) yield significant kernel-level efficiency gains, the massive framework bloat effectively "masks" these improvements, yielding negligible system-level speedups[cite: 339, 340].
+    \item \textbf{Quantification of the Agentic Tax:} We demonstrate that the combined GPU/CPU overhead of LLM orchestration imposes a massive latency penalty, slowing down lightweight tools by up to $69.5\times$ compared to native execution.
+    \item \textbf{Microarchitectural Characterization:} We map specific tool classes to their defining hardware bottlenecks, revealing how multi-step agentic loops compound CPU inefficiency through context accumulation.
+    \item \textbf{Identification of the Masking Effect:} We prove that while classical hardware optimizations (AVX2, prefetching) yield significant kernel-level efficiency gains, the massive framework bloat effectively "masks" these improvements, yielding negligible system-level speedups.
 \end{enumerate}
 
 \section{Background}
@@ -61,13 +61,13 @@ With the rapid proliferation of autonomous AI agents, the software industry is i
 To contextualize the microarchitectural bottlenecks evaluated in this study, we must define the paradigms of agentic execution and the structural limitations of modern accelerators.\\
 
 \subsection{LLM Orchestration and the ReAct Framework}
-Traditional LLMs operate as stateless generators. The advent of "Tool-Calling" transforms these models into agents, typically utilizing the ReAct (Reasoning and Acting) framework. The model generates structured JSON strings to trigger external functions. An "Orchestration Layer"---such as a Python server---must intercept this generation, parse the JSON, execute the native subprocess, and inject the result back into the context window. This cycle of serialization and context accumulation forms the backbone of agentic workflows.
+Traditional LLMs operate as stateless generators. The advent of "Tool-Calling" transforms these models into agents, typically utilizing the ReAct (Reasoning and Acting) framework~\cite{react_yao}. The model generates structured JSON strings to trigger external functions. An "Orchestration Layer"---such as a Python server---must intercept this generation, parse the JSON, execute the native subprocess, and inject the result back into the context window. This strictly serial cycle of serialization and context accumulation forms the backbone of agentic workflows~\cite{paste}.
 
 \subsection{Architectural Divergence: ML vs. Datacenter Workloads}
-Modern LLM performance is driven by GPU-accelerated matrix multiplications. However, agentic tool calls trigger tasks that are fundamentally hostile to GPU architectures[cite: 326]. Operations like querying a database or traversing a filesystem are inherently scalar, requiring deep recursive logic and complex memory pointer chasing[cite: 327]. Consequently, they suffer from high Last-Level Cache (LLC) miss rates and branch mispredictions, making them behave more like traditional datacenter Remote Procedure Calls (RPC) than highly parallel machine learning kernels[cite: 328].
+Modern LLM performance is driven by GPU-accelerated matrix multiplications. However, agentic tool calls trigger tasks that are fundamentally hostile to GPU architectures~\cite{cpu_centric}. Operations like querying a database or traversing a filesystem are inherently scalar, requiring deep recursive logic and complex memory pointer chasing. Consequently, they suffer from high Last-Level Cache (LLC) miss rates and branch mispredictions, making them behave more like traditional datacenter Remote Procedure Calls (RPC) than highly parallel machine learning kernels~\cite{data_systems}.
 
 \subsection{Hardware Telemetry via PAPI}
-To accurately measure the efficiency of native execution kernels without the noise of the Python runtime, systems researchers utilize Hardware Performance Counters (HPCs). By accessing the Linux Performance Monitoring Unit (PMU) via the Performance Application Programming Interface (PAPI) [cite: 334, 335], we achieve cycle-accurate telemetry of microarchitectural events, allowing us to isolate the 'Agentic Tax' at a hardware level.
+To accurately measure the efficiency of native execution kernels without the noise of the Python runtime, systems researchers utilize Hardware Performance Counters (HPCs). By accessing the Linux Performance Monitoring Unit (PMU) via the Performance Application Programming Interface (PAPI), we achieve cycle-accurate telemetry of microarchitectural events, allowing us to isolate the 'Agentic Tax' at a hardware level.
 
 \section{Project Methodology}
 
@@ -85,7 +85,7 @@ By decoupling the architecture, we ensure that the C++ kernels are completely is
 \subsection{Microarchitectural Telemetry Integration}
 To capture low-level CPU behavior, we integrated the Performance Application Programming Interface (PAPI) via the \texttt{pypapi} C-bindings. We tap directly into the Linux kernel's Performance Monitoring Unit (PMU) to track four specific hardware events: Total Cycles (\texttt{PAPI\_TOT\_CYC}), Total Instructions (\texttt{PAPI\_TOT\_INS}), Branch Mispredictions (\texttt{PAPI\_BR\_MSP}), and Level 3 Cache Misses (\texttt{PAPI\_L3\_TCM}). All microarchitectural telemetry was captured on an isolated testbed utilizing an  Intel(R) Xeon(R) Gold 6242R processor running at a base frequency of 3.10GHz, ensuring predictable cycle-to-latency conversions.\\
 
-\noindent To prevent idle GPU wait times from skewing the CPU metrics, we implemented a tightly scoped windowing strategy. PAPI hardware locks are acquired and released exactly around specific execution phases:
+\noindent To prevent idle GPU wait times from skewing the CPU metrics~\cite{coupled_architectures}, we implemented a tightly scoped windowing strategy. PAPI hardware locks are acquired and released exactly around specific execution phases:
 \begin{itemize}
 \item \textbf{CPU Window 1 (Setup):} Captures prompt template assembly and tokenization.
 \item \textbf{CPU Window 2 (Serialization):} Captures output decoding, JSON extraction, and string manipulation.
@@ -95,7 +95,7 @@ The hardware EventSet is strictly managed within a \texttt{try...finally} block,
 \subsection{The Agentic Execution Engine}
 We utilized \texttt{Qwen/Qwen2.5-7B-Instruct} as our base model, loaded in half-precision (FP16) utilizing Scaled Dot-Product Attention (SDPA) for optimized VRAM footprint. To force deterministic tool-calling behavior and eliminate variance between runs, generation sampling was disabled (\texttt{do\_sample=False}).\\
 
-\noindent Smaller parameter models (e.g., 7B) frequently exhibit instruct-following instability, such as eagerly stacking multiple JSON tool calls in a single response or appending plain-text explanations that break standard parsers. To mitigate this, our orchestration layer implements a robust regex-based extraction pipeline that isolates the first valid JSON object, executes the corresponding tool via a subprocess, and injects the \texttt{stdout} result back into the context window under the official Hugging Face \texttt{"tool"} role. This dynamic ReAct loop dynamically resizes its step count based on the model's autonomous decisions, capped at a hard limit to prevent infinite loops.
+\noindent Prior benchmarking reports a ``parameter paradox'' in tool-oriented workflows: protocol adherence does not monotonically improve with parameter count, and lightweight models can match or surpass larger models in structured tool-call compliance~\cite{ai_nativebench}. Nonetheless, LLMs may occasionally emit malformed tool-call syntax (e.g., multiple JSON objects or mixed natural language with JSON), which can break strict parsers. To mitigate this, our orchestration layer implements a robust regex-based extraction pipeline that isolates the first valid JSON object, executes the corresponding tool via a subprocess, and injects the \texttt{stdout} result back into the context window under the official Hugging Face \texttt{"tool"} role. This dynamic ReAct loop dynamically resizes its step count based on the model's autonomous decisions, capped at a hard limit to prevent infinite loops.
 
 \subsection{Tool Kernels and Workloads}
 To represent the diverse landscape of agentic operations, we developed three distinct C++ kernels, each targeting a different microarchitectural bottleneck. Corresponding Python generator scripts were built to synthesize massive, static payloads for these tools:
@@ -133,7 +133,7 @@ The data immediately reveals that the "Agentic Tax" is not a proportional scalar
 
 \noindent Conversely, the memory-bound database lookup exhibits a significantly lower multiplier of $2.4\times$. This aligns with Amdahl's Law: because the forced full-table scan requires over 2.5 billion CPU cycles and natively consumes $\sim 764\text{ms}$, the fixed LLM orchestration and GPU generation costs account for a proportionally smaller fraction of the total execution time.\\
 
-\noindent These findings confirm our primary hypothesis: for the vast majority of agentic tasks, execution time is entirely dominated by the LLM framework's orchestration overhead rather than the tool kernel's execution time. This "masking effect" forces us to re-evaluate how we optimize agentic systems at the hardware level.
+\noindent These findings confirm our primary hypothesis: for the vast majority of agentic tasks, execution time is entirely dominated by the LLM framework's orchestration overhead rather than the tool kernel's execution time~\cite{sutradhara, data_systems, cpu_centric}. This "masking effect" forces us to re-evaluate how we optimize agentic systems at the hardware level.
 
 \subsection{Compounding Overhead in Multi-Step Workflows}
 
@@ -171,7 +171,7 @@ Conversely, the C++ execution metrics are entirely independent of the step count
 
 \noindent Furthermore, while the Python framework struggles with efficiency (the "Language Barrier"), the compiled C++ kernels operate tightly near the theoretical maximum throughput of the CPU pipeline ($\sim$2.0 IPC). However, minor fluctuations reveal specific microarchitectural bottlenecks: the IPC of the DB scan remains remarkably high (2.03) because the CPU's hardware L3 Prefetcher successfully streams the sequential table scan into cache. Conversely, the AST math evaluator's IPC dips slightly (1.99) due to the massive volume of \texttt{if/else} branching required to parse nested math strings, causing hundreds of thousands of pipeline-flushing branch mispredictions. \\
 
-\noindent Ultimately, these metrics confirm that LLM coordination overhead is a compounding tax that scales with agent autonomy, perpetually dragging down overall system efficiency despite highly optimized native tooling.
+\noindent Ultimately, these metrics confirm that LLM coordination overhead is a compounding tax that scales with agent autonomy, perpetually dragging down overall system efficiency despite highly optimized native tooling~\cite{paste, data_systems}.
 
 \subsection{Microarchitectural Optimizations and the Orchestration Masking Effect}
 \label{sec:hardware_optimizations}
@@ -189,7 +189,7 @@ In our first optimization experiment, we compiled the Abstract Syntax Tree (AST)
     \label{fig:compute_avx2}
 \end{figure} 
 
-\noindent As illustrated in Figure \ref{fig:compute_avx2}, the parsing logic relies heavily on recursive control-flow divergence and pointer-chasing memory access patterns, which effectively neutralized the compiler's auto-vectorization capabilities. Consequently, kernel-level instruction throughput remained static (IPC $\approx 1.99$), and the tool execution cycles showed a negligible $0.6\%$ improvement (dropping from $84.1 \times 10^6$ to $83.6 \times 10^6$ cycles). This demonstrates that recursive, string-heavy agentic tools hit a fundamental vectorization wall, proving highly resistant to classical SIMD acceleration.
+\noindent As illustrated in Figure \ref{fig:compute_avx2}, the parsing logic relies heavily on recursive control-flow divergence and pointer-chasing memory access patterns, which effectively neutralized the compiler's auto-vectorization capabilities. Consequently, kernel-level instruction throughput remained static (IPC $\approx 1.99$), and the tool execution cycles showed a negligible $0.6\%$ improvement (dropping from $84.1 \times 10^6$ to $83.6 \times 10^6$ cycles). This outcome reflects a limitation of simple, compiler-driven SIMD on branch-heavy recursive parsers; achieving SIMD speedups for string parsing typically requires algorithmic restructuring and explicit SIMD techniques, as demonstrated by high-performance parsers such as \texttt{simdjson}~\cite{simdjson}.
 
 \subsubsection{Memory-Bound Execution: Latency Hiding via Software Prefetching}
 To evaluate memory bottlenecks, we transitioned to a full-table database scan kernel, bypassing indexes to intentionally thrash the Last-Level Cache (LLC). We introduced a hardware-aware optimization by injecting software prefetch instructions (\texttt{\_\_builtin\_prefetch}) with a lookahead distance of 32 elements. This explicitly instructs the CPU's memory controller to fetch heap data into the L1 cache before the execution pipeline requires it. \\
@@ -226,17 +226,17 @@ Our reliance on the Performance Application Programming Interface (PAPI) introdu
 Analysis of the execution model reveals this is a profiling blind spot rather than a true systemic degradation. The master thread, which initialized PAPI, entered a spin-wait state at the OpenMP barrier, executing minimal instructions while accumulating massive cycle counts. The telemetry failed to capture the cumulative instruction throughput of the background worker threads. Consequently, our framework accurately captures scalar execution efficiency but requires future modification (such as thread-local PAPI event sets) to accurately quantify multi-threaded kernel efficiency.
 
 \subsection{Concurrency Limits and Negative Scaling}
-Beyond the profiling artifact, the OpenMP I/O optimization exhibited textbook negative scaling. The optimized kernel required $15\times$ more CPU cycles to complete the same file-system walk as the single-threaded baseline. Profiling revealed that aggregating the file count via a global atomic variable (\texttt{std::atomic}) induced severe L1 cache lock contention. The worker threads spent the majority of their execution time stalled, fighting for exclusive cache-line access. Furthermore, parallelizing disk reads for a small directory hit immediate serialization bottlenecks within the OS kernel. This demonstrates that agentic tool frameworks cannot blindly rely on multithreading to solve I/O bottlenecks without implementing highly tuned, lock-free, thread-local data structures and ensuring massive payload sizes to justify the thread-pool overhead.
+Beyond the profiling artifact, the OpenMP I/O optimization exhibited textbook negative scaling. The optimized kernel required $15\times$ more CPU cycles to complete the same file-system walk as the single-threaded baseline. Profiling revealed that aggregating the file count via a global atomic variable (\texttt{std::atomic}) induced severe L1 cache lock contention. The worker threads spent the majority of their execution time stalled, fighting for exclusive cache-line access. Furthermore, parallelizing disk reads for a small directory hit immediate serialization bottlenecks within the OS kernel. This demonstrates that agentic tool frameworks cannot blindly rely on multithreading to solve I/O bottlenecks without implementing highly tuned, lock-free, thread-local data structures and ensuring massive payload sizes to justify the thread-pool overhead~\cite{cpu_centric}.
 
 \subsection{Static Workloads vs. Real-World Variance}
-To ensure deterministic execution and pristine cycle counting, generation sampling was disabled (\texttt{do\_sample=False}) and static context payloads were utilized. In production environments, LLMs frequently hallucinate tool arguments, requiring multi-turn error-correction loops. This dynamic variance would exponentially increase the "Agentic Tax" measured in our study, meaning our results represent a best-case lower bound for orchestration overhead.
+To ensure deterministic execution and pristine cycle counting, generation sampling was disabled (\texttt{do\_sample=False}) and static context payloads were utilized. In production environments, LLMs frequently hallucinate tool arguments, requiring multi-turn error-correction loops~\cite{ai_nativebench}. This dynamic variance would exponentially increase the "Agentic Tax" measured in our study, meaning our results represent a best-case lower bound for orchestration overhead~\cite{toolcaching}.
 
 \section{Conclusion and Future Work}
 \label{sec:conclusion}
 
-As the artificial intelligence industry aggressively pivots toward autonomous, multi-step agentic workflows, the underlying systems architecture must adapt to support massive tool-calling concurrency. In this paper, we introduced a decoupled profiling framework to isolate and quantify the "Agentic Tax"---the microarchitectural overhead imposed by LLM orchestration layers. \\
+As the artificial intelligence industry aggressively pivots toward autonomous, multi-step agentic workflows, the underlying systems architecture must adapt to support massive tool-calling concurrency~\cite{aragog}. In this paper, we introduced a decoupled profiling framework to isolate and quantify the "Agentic Tax"---the microarchitectural overhead imposed by LLM orchestration layers. \\
 
-\noindent Our empirical evaluation of compute, memory, and I/O-bound tool kernels yields a definitive conclusion: the current paradigm of agentic execution is crippled by an orchestration bottleneck. We demonstrated that for lightweight tools, the combined penalty of GPU token generation and CPU-bound Python JSON serialization can induce a $69.5\times$ latency slowdown compared to native execution. \\
+\noindent Our empirical evaluation of compute, memory, and I/O-bound tool kernels yields a definitive conclusion: the current paradigm of agentic execution is crippled by an orchestration bottleneck. We demonstrated that for lightweight tools, the combined penalty of GPU token generation and CPU-bound Python JSON serialization can induce a $69.5\times$ latency slowdown compared to native execution. These results align with CPU-centric profiling of agentic AI frameworks, where host-side tool processing and orchestration frequently dominate end-to-end latency~\cite{cpu_centric}. \\
 
 \noindent Crucially, our microarchitectural interventions proved that classical hardware optimizations at the tool level are rendered statistically irrelevant by this overarching tax. Even when successfully deploying software prefetching to hide RAM latency and increase kernel IPC by $14.2\%$, the end-to-end system speedup remained below $1\%$. We term this the \textbf{Masking Effect}: the execution bloat of the orchestration framework is so massive that it effectively swallows any microarchitectural victories achieved within the tool kernels.
 
@@ -244,8 +244,8 @@ As the artificial intelligence industry aggressively pivots toward autonomous, m
 Based on these findings, future systems research must pivot away from optimizing tool-execution kernels and focus aggressively on minimizing the orchestration layer. We propose three critical avenues for future work:
 
 \begin{enumerate}
-    \item \textbf{High-Throughput Inference Engines:} Transitioning away from naive, synchronous generation pipelines to continuous batching frameworks (e.g., vLLM) that utilize PagedAttention to minimize the GPU generation latency portion of the Agentic Tax.
-    \item \textbf{Compiled Orchestrators and Zero-Copy Routing:} Migrating the orchestration logic from Python to compiled languages (Rust/C++). Furthermore, replacing standard JSON libraries with SIMD-accelerated parsers (e.g., \texttt{orjson}) can drastically reduce the CPU cycles wasted on serialization and dictionary lookups.
+    \item \textbf{High-Throughput Inference Engines:} Transitioning away from naive, synchronous generation pipelines to continuous batching frameworks (e.g., vLLM) that utilize PagedAttention to minimize the GPU generation latency portion of the Agentic Tax~\cite{sutradhara, data_systems}.
+    \item \textbf{Compiled Orchestrators and Zero-Copy Routing:} Migrating the orchestration logic from Python to compiled languages (Rust/C++). Furthermore, replacing standard JSON libraries with SIMD-accelerated parsers (e.g., \texttt{simdjson}) or fast native JSON libraries (e.g., \texttt{orjson}) can drastically reduce the CPU cycles wasted on serialization and dictionary lookups~\cite{simdjson}.
     \item \textbf{Standardized Binary Protocols:} The reliance on string-based JSON for LLM-to-tool communication is fundamentally inefficient. Future research should explore fine-tuning LLMs to output structured, in-memory binary formats (such as Apache Arrow) to allow tools to execute directly on the generation buffer without intermediate parsing.
 \end{enumerate}
 
@@ -254,6 +254,54 @@ Based on these findings, future systems research must pivot away from optimizing
 \section{References}
 % Use a bibliography tool or manual entries.
 % Example: \bibliographystyle{plain} \bibliography{refs}
+
+\begingroup
+\renewcommand{\section}[2]{}% locally suppress duplicate "References" heading from thebibliography
+\begin{thebibliography}{99}
+
+\bibitem{data_systems}
+Efficient LLM Serving for Agentic Workflows: A Data Systems Perspective.
+\url{https://arxiv.org/abs/2603.16104v1}
+
+\bibitem{sutradhara}
+Sutradhara: An Intelligent Orchestrator-Engine Co-design for Tool-based Agentic Inference.
+\url{https://arxiv.org/abs/2601.12967}
+
+\bibitem{cpu_centric}
+A CPU-Centric Perspective on Agentic AI.
+\url{https://arxiv.org/abs/2511.00739}
+
+\bibitem{simdjson}
+Parsing Gigabytes of JSON per Second.
+\url{https://arxiv.org/abs/1902.08318}
+
+\bibitem{paste}
+Act While Thinking: Accelerating LLM Agents via Pattern-Aware Speculative Tool Execution.
+\url{https://arxiv.org/abs/2603.18897v1}
+
+\bibitem{coupled_architectures}
+Characterizing and Optimizing LLM Inference Workloads on CPU-GPU Coupled Architectures.
+\url{https://arxiv.org/abs/2504.11750v1}
+
+\bibitem{ai_nativebench}
+AI-NativeBench: An Open-Source White-Box Agentic Benchmark Suite for AI-Native Systems.
+\url{https://arxiv.org/abs/2601.09393v1}
+
+\bibitem{toolcaching}
+ToolCaching: Towards Efficient Caching for LLM Tool-calling.
+\url{https://arxiv.org/abs/2601.15335}
+
+\bibitem{aragog}
+Aragog: Just-in-Time Model Routing for Scalable Serving of Agentic Workflows.
+\url{https://arxiv.org/abs/2511.20975}
+
+\bibitem{react_yao}
+ReAct: Synergizing Reasoning and Acting in Language Models.
+\url{https://doi.org/10.48550/arXiv.2210.03629}
+
+\end{thebibliography}
+\endgroup
+
 
 \clearpage
 
