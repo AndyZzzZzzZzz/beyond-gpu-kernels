@@ -62,7 +62,7 @@ With the rapid proliferation of autonomous AI agents, the software industry is i
 To contextualize the microarchitectural bottlenecks evaluated in this study, we must define the paradigms of agentic execution and the structural limitations of modern accelerators.\\
 
 \subsection{LLM Orchestration and the ReAct Framework}
-Traditional LLMs operate as stateless generators. The advent of "Tool-Calling" transforms these models into agents, typically utilizing the ReAct (Reasoning and Acting) framework. The model generates structured JSON strings to trigger external functions. An "Orchestration Layer"---such as a Python server---must intercept this generation, parse the JSON, execute the native subprocess, and inject the result back into the context window. This strictly serial cycle of serialization and context accumulation forms the backbone of agentic workflows~\cite{paste}.
+Traditional LLMs operate as stateless generators. The advent of "Tool-Calling" transforms these models into agents, typically utilizing the ReAct (Reasoning and Acting) framework~\cite{react_yao}. The model generates structured JSON strings to trigger external functions. An "Orchestration Layer"---such as a Python server---must intercept this generation, parse the JSON, execute the native subprocess, and inject the result back into the context window. This strictly serial cycle of serialization and context accumulation forms the backbone of agentic workflows~\cite{paste}.
 
 \subsection{Architectural Divergence: ML vs. Datacenter Workloads}
 Modern LLM performance is driven by GPU-accelerated matrix multiplications. However, agentic tool calls trigger tasks that are fundamentally hostile to GPU architectures~\cite{cpu_centric}. Operations like querying a database or traversing a filesystem are inherently scalar, requiring deep recursive logic and complex memory pointer chasing. Consequently, they suffer from high Last-Level Cache (LLC) miss rates and branch mispredictions, making them behave more like traditional datacenter Remote Procedure Calls (RPC) than highly parallel machine learning kernels~\cite{data_systems}.
@@ -295,6 +295,10 @@ ToolCaching: Towards Efficient Caching for LLM Tool-calling.
 \bibitem{aragog}
 Aragog: Just-in-Time Model Routing for Scalable Serving of Agentic Workflows.
 \url{https://arxiv.org/abs/2511.20975}
+
+\bibitem{react_yao}
+ReAct: Synergizing Reasoning and Acting in Language Models.
+\url{https://doi.org/10.48550/arXiv.2210.03629}
 
 \end{thebibliography}
 \endgroup
