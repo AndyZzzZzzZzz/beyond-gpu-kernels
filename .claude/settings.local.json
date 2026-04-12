@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(pdflatex --version)",
-      "Bash(pdflatex -interaction=nonstopmode -halt-on-error presentation.tex)"
-    ]
-  }
-}

@@ -1,56 +1,75 @@
 # Presentation Script — *Beyond the GPU: A Microarchitectural Analysis of LLM Tool-Calling Kernels*
 
 **Total target length:** ~15 minutes
-**Speakers:** TJ Grewal → Kunpeng Zhang → Fazal Rehman
+**Speakers:** TJ Grewal → Andy Zhang → Fazal Rehman
 
-Speaker assignments follow the appendix in the report: TJ covers motivation / background / architecture; Kunpeng covers methodology, kernels, and optimizations; Fazal covers results, limitations, and conclusion.
+Speaker assignments follow the appendix in the report: TJ covers motivation / background / architecture; Andy covers methodology, kernels, and optimizations; Fazal covers results, limitations, and conclusion.
 
 Rough pacing (21 slides):
 - TJ (Slides 1–6) — ~4.5 min
-- Kunpeng (Slides 7–12) — ~5 min
+- Andy (Slides 7–12) — ~5 min
 - Fazal (Slides 13–21) — ~5.5 min
 
 ---
 
 ## Part I — TJ Grewal (Motivation, Background, Architecture Overview)
 
+
 ### Slide 1 — Title
-> Good afternoon everyone. Our project is titled *"Beyond the GPU: A Microarchitectural Analysis of LLM Tool-Calling Kernels."* I'm TJ Grewal, and I'll be presenting with my teammates Kunpeng Zhang and Fazal Rehman. The core question we set out to answer is deceptively simple: **what happens when the CPU, not the GPU, becomes the bottleneck for AI?**
+> Good afternoon everyone, We're here to present *"Beyond the GPU: A Microarchitectural Analysis of LLM Tool-Calling Kernels."* I'm TJ, and I'll be presenting with my teammates Andy and Fazal. The core question we set out to answer is deceptively simple: **what happens when the CPU, not the GPU, becomes the bottleneck for AI?**
+
 
 ### Slide 2 — Outline
-> Here's how we'll walk through our work. I'll kick things off with the motivation and background on agentic systems, and set up our research questions. Kunpeng will then take you through the methodology — how we built our decoupled benchmarking harness, integrated hardware performance counters, and applied classical optimizations to our C++ kernels. Fazal will close by presenting our empirical results, our key finding — which we call the *Masking Effect* — and discuss the implications for future agentic architectures.
+> I'll start with the motivation and background on agentic systems, and set up our research questions. 
+> Andy will then take you through the methodology — how we built our decoupled benchmarking harness, integrated hardware performance counters, and applied  optimizations to our C++ kernels. 
+> Fazal will close by presenting our empirical results, our key finding and discuss the implications for future agentic architectures.
+
 
 ### Slide 3 — The Shift: From Chatbot to Autonomous Agent
-> Almost all of the optimization work in generative AI over the past few years has focused on one thing: **accelerating the GPU forward-pass**. Researchers obsess over Time-To-First-Token, inter-token latency, KV-cache management — all GPU-side concerns.
+> Most optimization work in gen AI over the past few years has been focused on one thing: **accelerating the GPU forward-pass**. 
+> Researchers obsess over Time-To-First-Token, inter-token latency, KV-cache management - which are all GPU-side concerns.
 >
-> But LLMs are no longer just text generators. They are evolving into autonomous agents that reason, call external tools, parse results, and iterate in a loop. And the moment an agent stops generating tokens and starts *doing things* — querying databases, walking filesystems, parsing JSON — the execution bottleneck abruptly shifts **from the accelerator back to the host CPU**.
+> But LLMs are no longer just text generators. They are evolving into agents that reason, call external tools, parse results, and iterate in a loop. 
+> And the moment an agent stops generating tokens and starts doing things like querying databases, walking filesystems, parsing JSON -  
+> the execution bottleneck shifts from the GPU to the CPU.
 >
-> And here's the problem: current systems literature largely treats the tool-execution pipeline as a black box. People report wall-clock numbers, but nobody is isolating the hardware penalties underneath. That's the gap our work fills.
+> The problem is that the current literature largely treats the tool-execution pipeline as a black box. People report wall-clock numbers, but nobody is isolating the hardware penalties underneath. We explored this gap in our research project.
+
 
 ### Slide 4 — ReAct Framework
-> Let me quickly define the ReAct framework, which is the dominant paradigm for tool-calling agents today. ReAct stands for *Reasoning and Acting*.
+> We'll quickly discuss the ReAct framework, which is the dominant paradigm for tool-calling agents today. ReAct stands for *Reasoning and Acting*.
 >
-> The loop works like this: the LLM reads a prompt, emits a structured JSON tool call, a Python orchestrator parses that JSON, executes a native subprocess, captures the standard output, and injects the result back into the model's context window. Then it repeats.
+> The loop works like this: the LLM reads a prompt, emits a structured JSON tool call. Then an orchestrator parses that JSON, executes a native subprocess. Finally it captures the standard output, and injects the result back into the model's context window. This cycle repeats till the work is done.
 >
-> The critical thing to notice is that **this loop is strictly serial**. Each step gates the next. And every single one of those arrows on the right involves CPU-bound work — parsing strings, managing context, serializing and deserializing data. This serial chain is the foundation of agentic workflows.
+> The critical thing to notice is that **this loop is serial**. Each step gates the next. 
+> Every single one of those arrows on the right involves CPU-bound work — such as parsing strings, managing context, serializing and deserializing data. This serial chain is the foundation of agentic workflows.
+
 
 ### Slide 5 — Architectural Divergence
-> Now the deeper issue is that agentic workloads are *fundamentally mismatched* with GPU architecture. On the left you have what GPUs are great at: dense matrix math, massively parallel, predictable memory access, high arithmetic intensity.
+> Now the bigger issue is that agentic workloads are *quite mismatched* with GPU architecture. On the left you have what GPUs are great at: 
+> which is dense matrix math, massively parallel, predictable memory access, and high arithmetic intensity processes.
 >
-> On the right you have what agents actually *do*: JSON parsing, database lookups, filesystem traversal. These are serial, branch-heavy, full of pointer chasing, and they hammer the last-level cache with misses. In systems terms, these workloads look much more like traditional datacenter RPCs than machine-learning kernels.
+> On the right you have what agents actually *do*: JSON parsing, database lookups, filesystem traversal. 
+> These tasks are serial, branch-heavy, full of pointer chasing, and they hammer the last-level cache with misses. 
+> Basically, these workloads look much more like traditional datacenter workflows than machine-learning kernels.
 >
-> So our hypothesis going in was: **agent tools are fundamentally hostile to GPU architectures, and the overhead of bolting an LLM onto them is probably enormous.** Our job was to measure exactly how enormous.
+> So our hypothesis going in was: **agent tools are hostile to GPU architectures, and the overhead of bolting an LLM onto them is probably enormous.** Our job was to measure this performance hit.
 
 ### Slide 6 — Research Questions & Contributions
-> This led us to three research questions: How much CPU overhead does the orchestration layer actually impose? Do classical hardware optimizations — SIMD, prefetching, OpenMP — still help agentic tools? And critically, do kernel-level efficiency gains actually propagate to end-to-end latency?
+> This led us to three research questions: How much CPU overhead does the orchestration layer actually impose? 
+> Do classical hardware optimizations like SIMD, prefetching, OpenMP — still help agentic tools? 
+> And, do kernel-level efficiency gains actually propagate to end-to-end latency?
 >
-> Our contributions, which we'll walk through in detail, are threefold. First, we quantify what we call the **Agentic Tax**: a slowdown of up to *69.5 times* on lightweight tools. Second, we characterize the microarchitectural bottlenecks specific to compute-, memory-, and I/O-bound agent tools. And third, we identify and name the **Masking Effect**: the phenomenon where hardware optimizations at the kernel level are rendered statistically invisible by the orchestration layer sitting on top.
+> Our contributions, are threefold. 
+- First, we quantify what we call the **Agentic Tax**: a slowdown of up to *69.5 times* on lightweight tools. 
+- Second, we characterize the microarchitectural bottlenecks specific to compute-, memory-, and I/O-bound agent tools. 
+- And third, we identify and name the **Masking Effect**: the phenomenon where hardware optimizations at the kernel level are rendered invisible by the orchestration layer sitting on top.
 >
-> With that, I'll hand it over to Kunpeng to explain how we actually built the system to measure all of this.
+> With that, I'll hand it over to Andy to explain how we actually built the system to measure all of this.
 
 ---
 
-## Part II — Kunpeng Zhang (Methodology, Kernels, Hardware Optimizations)
+## Part II — Andy Zhang (Methodology, Kernels, Hardware Optimizations)
 
 ### Slide 7 — Decoupled System Architecture
 > Thanks, TJ. So our first challenge was methodological: to accurately measure the overhead of LLM orchestration, we had to physically isolate the Python runtime from the native execution kernels. Otherwise, Python's GIL and garbage collector would contaminate every single hardware counter reading.
@@ -104,7 +123,7 @@ Rough pacing (21 slides):
 ## Part III — Fazal Rehman (Results, Masking Effect, Conclusion)
 
 ### Slide 12 — Quantifying the Agentic Tax (Figure)
-> Thanks, Kunpeng. Alright, this is the headline result, and it's the figure we spent the most time staring at.
+> Thanks, Andy. Alright, this is the headline result, and it's the figure we spent the most time staring at.
 >
 > What you're looking at is end-to-end latency for all three workload classes — compute, memory, and I/O. The Y-axis is **logarithmic**. For each workload, the left bar is the direct C++ baseline and the right bar is the full agentic loop. The red annotations at the top show the multiplicative slowdown — in other words, the Agentic Tax.
 
