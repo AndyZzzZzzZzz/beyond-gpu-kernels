@@ -101,9 +101,9 @@
 % --- Title Page Info ---
 \title[Beyond the GPU]{Beyond the GPU}
 \subtitle{A Microarchitectural Analysis of LLM Tool-Calling Kernels}
-\author[Zhang, Grewal, Rehman]{Kunpeng Zhang \and TJ Grewal \and Fazal Rehman}
-\institute[SFU]{Simon Fraser University \\ \texttt{\{kza63, tga47, fra22\}@sfu.ca}}
-\date{\today}
+\author[Zhang, Rehman, Grewal]{Kunpeng Zhang \and Fazal Rehman \and TJ Grewal}
+\institute[SFU]{CMPT 450}
+\date{}
 
 \begin{document}
 
@@ -122,516 +122,277 @@
   \begin{flushleft}
     \hspace{1.5em}{\Huge\bfseries\textcolor{bone}{Beyond the GPU}}\\[0.4em]
     \hspace{1.5em}{\small\textcolor{neonmint}{A Microarchitectural Analysis of LLM Tool-Calling Kernels}}\\[1.8em]
-    \hspace{1.5em}{\footnotesize\textcolor{mist}{Kunpeng Zhang \quad\textcolor{ash}{/}\quad TJ Grewal \quad\textcolor{ash}{/}\quad Fazal Rehman}}\\[0.3em]
-    \hspace{1.5em}{\scriptsize\textcolor{ash}{Simon Fraser University}}\\[2em]
+    \hspace{1.5em}{\footnotesize\textcolor{mist}{Kunpeng Zhang \quad\textcolor{ash}{/}\quad Fazal Rehman \quad\textcolor{ash}{/}\quad TJ Grewal}}\\[0.3em]
+    \hspace{1.5em}{\scriptsize\textcolor{ash}{CMPT 450}}\\[2em]
     \hspace{1.5em}{\scriptsize\textcolor{ash}{\textit{What happens when the CPU becomes the bottleneck for AI?}}}
   \end{flushleft}
 \end{frame}
 
 % =================================================================
-% SLIDE 2: Outline
+% SLIDE 2: INTRODUCTION & MOTIVATION
 % =================================================================
-\begin{frame}{Outline}
+\begin{frame}{Introduction \& Motivation}
   \begin{tikzpicture}[remember picture, overlay]
     \fill[neonviolet, opacity=0.02] (current page.south west) ++(0,0) circle (6cm);
   \end{tikzpicture}
   \begin{columns}
-    \begin{column}{0.5\textwidth}
-      \textcolor{neonmint}{\textbf{Part I -- TJ Grewal}}
-      \begin{enumerate}
-        \item Motivation \& The Agentic Shift
-        \item Background: ReAct \& Tool-Calling
-        \item Research Questions
-      \end{enumerate}
-      \vspace{0.6em}
-      \textcolor{neonviolet}{\textbf{Part II -- Kunpeng Zhang}}
-      \begin{enumerate}
-        \setcounter{enumi}{3}
-        \item Decoupled System Architecture
-        \item PAPI Telemetry Integration
-        \item C++ Kernels \& Hardware Optimizations
-      \end{enumerate}
-    \end{column}
-    \begin{column}{0.5\textwidth}
-      \textcolor{neonpink}{\textbf{Part III -- Fazal Rehman}}
-      \begin{enumerate}
-        \setcounter{enumi}{6}
-        \item Quantifying the Agentic Tax
-        \item Multi-Step Compounding Overhead
-        \item The Masking Effect
-        \item Limitations \& Future Work
-        \item Conclusion
-      \end{enumerate}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-% =================================================================
-% PART I: TJ GREWAL
-% =================================================================
-\section{Motivation \& Background}
-
-\begin{frame}{The Shift: From Chatbot to Autonomous Agent}
-  \begin{columns}
-    \begin{column}{0.58\textwidth}
-      \begin{itemize}
-        \item LLMs are rapidly evolving from \textbf{static chat interfaces} into \textbf{autonomous agents}.
-        \item Modern agents \textit{reason}, \textit{call tools}, \textit{parse results}, and \textit{iterate}.
-        \item Historical optimization focus: \textcolor{neonamber}{\textbf{GPU forward-pass}}
-        \begin{itemize}
-          \item Time-To-First-Token (TTFT)
-          \item Inter-token latency
-        \end{itemize}
-        \item But agents spend most of their time \textbf{outside} the GPU\dots
-      \end{itemize}
-    \end{column}
-    \begin{column}{0.42\textwidth}
-      \begin{block}{Key Insight}
-        The execution bottleneck is shifting \textbf{from the accelerator back to the host CPU}.
-      \end{block}
-      \vspace{0.3em}
-      \begin{alertblock}{The Gap}
-        Current literature treats the tool-execution pipeline as a \textit{black box}.
-      \end{alertblock}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\begin{frame}{What is ``Tool Calling''? -- The ReAct Framework}
-  \begin{columns}
     \begin{column}{0.55\textwidth}
-      \textbf{ReAct = Reasoning + Acting}
-      \begin{enumerate}
-        \item LLM reads the user prompt
-        \item LLM emits a \textbf{structured JSON} tool call
-        \item Python orchestrator \textbf{parses} the JSON
-        \item Orchestrator \textbf{executes} a native subprocess
-        \item \texttt{stdout} is \textbf{injected back} into context
-        \item Repeat until the task is complete
-      \end{enumerate}
+      \begin{block}{The Paradigm Shift}
+        LLMs are transitioning from \textbf{passive text generators} to \textbf{active, autonomous agents} utilized in complex engineering workflows.
+      \end{block}
       \vspace{0.4em}
-      \textcolor{neonpink}{\textbf{This loop is strictly serial.}}
+      \begin{block}{The Misplaced Focus}
+        Historically, optimization efforts have overwhelmingly targeted the \textcolor{neonamber}{\textbf{GPU forward-pass}}, minimizing Time-To-First-Token (TTFT).
+      \end{block}
     \end{column}
     \begin{column}{0.45\textwidth}
-      \begin{tikzpicture}[node distance=0.55cm, font=\scriptsize]
-        \tikzstyle{box}=[draw=neonmint, thick, rounded corners=1pt, fill=slate,
-                          minimum width=3.3cm, minimum height=0.6cm, text centered, text=bone]
-        \tikzstyle{arrow}=[->, thick, neonmint]
-        \node[box] (llm) {LLM (GPU): emit JSON};
-        \node[box, below=of llm] (parse) {Python: parse \& validate};
-        \node[box, below=of parse] (exec) {C++ tool: execute};
-        \node[box, below=of exec] (inject) {Python: inject result};
-        \draw[arrow] (llm) -- (parse);
-        \draw[arrow] (parse) -- (exec);
-        \draw[arrow] (exec) -- (inject);
-        \draw[arrow, neonpink] (inject.east) .. controls +(1.5,1) and +(1.5,-1) .. (llm.east)
-              node[midway, right, xshift=2pt, text=neonpink] {loop};
-      \end{tikzpicture}
+      \begin{alertblock}{The New Bottleneck}
+        As tool-calling expands, the execution bottleneck shifts abruptly \textbf{from the hardware accelerator back to the host CPU}.
+      \end{alertblock}
+      \vspace{0.5em}
+      \begin{center}
+        \textcolor{neonmint}{\textbf{The CPU is the new frontier.}}
+      \end{center}
     \end{column}
   \end{columns}
 \end{frame}
 
-\begin{frame}{Architectural Divergence: ML vs. Datacenter Workloads}
+% =================================================================
+% SLIDE 3: ARCHITECTURAL DIVERGENCE
+% =================================================================
+\begin{frame}{Architectural Divergence}
   \begin{columns}
     \begin{column}{0.5\textwidth}
-      \begin{block}{GPU-Friendly (Matrix Math)}
-        \begin{itemize}
-          \item Dense matrix multiplication
-          \item Massively parallel
-          \item Predictable memory access
-          \item High arithmetic intensity
-        \end{itemize}
+      \begin{block}{GPU Hostility}
+        Agentic tool tasks behave more like traditional datacenter \textbf{Remote Procedure Calls (RPC)} than highly parallel machine learning kernels.
+      \end{block}
+      \vspace{0.3em}
+      \begin{block}{Scalar by Nature}
+        Operations like parsing JSON, traversing filesystems, and querying databases are \textbf{inherently scalar}.
       \end{block}
     \end{column}
     \begin{column}{0.5\textwidth}
-      \begin{alertblock}{Agentic Tool Workloads}
+      \begin{alertblock}{The Hardware Penalty}
+        These tasks require deep recursive logic and complex memory pointer chasing, leading to:
         \begin{itemize}
-          \item JSON parsing, DB lookups, FS walks
-          \item Serial, branch-heavy
-          \item Pointer chasing $\rightarrow$ LLC misses
-          \item Behave like \textbf{datacenter RPCs}
+          \item Massive \textbf{Last-Level Cache (LLC)} miss rates
+          \item High \textbf{branch mispredictions}
+          \item Frequent \textbf{pipeline stalls}
         \end{itemize}
       \end{alertblock}
+      \vspace{0.3em}
+      \begin{center}
+        \textcolor{neonmint}{\textbf{Agent tools are fundamentally hostile to GPU architectures.}}
+      \end{center}
     \end{column}
   \end{columns}
-  \vspace{1em}
-  \begin{center}
-    \textcolor{neonmint}{\textbf{Agent tools are fundamentally hostile to GPU architectures.}}
-  \end{center}
 \end{frame}
 
-\begin{frame}{Research Questions \& Contributions}
-  \begin{exampleblock}{Research Questions}
-    \begin{enumerate}
-      \item How much CPU overhead does the LLM orchestration layer actually impose?
-      \item Do classical hardware optimizations (SIMD, prefetching, OpenMP) help agentic tools?
-      \item Does kernel-level efficiency propagate to end-to-end latency?
-    \end{enumerate}
+% =================================================================
+% SLIDE 4: CORE RESEARCH QUESTIONS
+% =================================================================
+\begin{frame}{Core Research Questions}
+  \begin{tikzpicture}[remember picture, overlay]
+    \fill[neonmint, opacity=0.02] (current page.north east) ++(-3,-2) circle (5cm);
+  \end{tikzpicture}
+  \vspace{0.5em}
+  \begin{exampleblock}{RQ1 --- Quantification}
+    What is the macro-level ``Agentic Tax'' (latency penalty) imposed strictly by the LLM orchestration framework?
   \end{exampleblock}
-
-  \textbf{Our three contributions:}
-  \begin{enumerate}
-    \item \textcolor{neonmint}{\textbf{Quantification of the Agentic Tax:}} up to $\mathbf{69.5\times}$ slowdown on lightweight tools.
-    \item \textcolor{neonviolet}{\textbf{Microarchitectural characterization}} of compute-, memory-, and I/O-bound agent tools.
-    \item \textcolor{neonpink}{\textbf{Identification of the Masking Effect:}} kernel-level wins rendered statistically invisible at the system level.
-  \end{enumerate}
+  \vspace{0.3em}
+  \begin{exampleblock}{RQ2 --- Microarchitectural Profiling}
+    How do specific tool classes map to their defining hardware bottlenecks during multi-step loops?
+  \end{exampleblock}
+  \vspace{0.3em}
+  \begin{exampleblock}{RQ3 --- Optimization Viability}
+    Do classical, kernel-level hardware optimizations effectively propagate to end-to-end system latency, or are they absorbed by the orchestration layer?
+  \end{exampleblock}
 \end{frame}
 
 % =================================================================
-% PART II: KUNPENG ZHANG
+% SLIDE 5: METHODOLOGY & SYSTEM ARCHITECTURE
 % =================================================================
-\section{Methodology}
-
-\begin{frame}{Decoupled System Architecture}
-  \textbf{Goal:} Isolate microarchitectural overhead \textit{without} cross-contamination between Python and C++.
-  \vspace{0.5em}
+\begin{frame}{Methodology \& System Architecture}
   \begin{columns}
-    \begin{column}{0.58\textwidth}
-      \begin{block}{Three Decoupled Components}
-        \begin{enumerate}
-          \item \textbf{Orchestrator (Python / FastAPI)}: prompt assembly, inference, JSON routing.
-          \item \textbf{Execution Kernels (C++)}: compiled native binaries for compute / memory / I/O.
-          \item \textbf{Static Workloads}: pre-generated deterministic stress payloads.
-        \end{enumerate}
+    \begin{column}{0.55\textwidth}
+      \begin{block}{Decoupled Harness}
+        Custom benchmarking suite that \textbf{strictly isolates} the Python/FastAPI orchestrator from compiled, native C++ execution kernels.
+      \end{block}
+      \vspace{0.3em}
+      \begin{block}{The Model}
+        \textbf{Qwen-2.5-7B-Instruct} running locally in FP16 with sampling disabled to guarantee \textbf{deterministic ReAct cycles}.
       \end{block}
     \end{column}
-    \begin{column}{0.42\textwidth}
-      \begin{alertblock}{Why Decouple?}
+    \begin{column}{0.45\textwidth}
+      \begin{block}{Cycle-Accurate Telemetry}
+        Integrated the Linux PMU via \textbf{PAPI} to capture strictly scoped hardware events exclusively during CPU execution windows:
         \begin{itemize}
-          \item Isolates C++ from Python GIL
-          \item Avoids Python memory-management noise
-          \item Enables pristine profiling
+          \item Instructions Per Cycle (IPC)
+          \item Branch Mispredictions
+          \item L3 Cache Misses
+          \item Total Cycles
         \end{itemize}
-      \end{alertblock}
+      \end{block}
     \end{column}
   \end{columns}
-  \vspace{0.5em}
+  \vspace{0.4em}
   \begin{center}
-    \textcolor{mist}{\textbf{Model:} Qwen2.5-7B-Instruct (FP16 + SDPA), \texttt{do\_sample=False}}
+    \textcolor{mist}{\small Testbed: Intel Xeon Gold 6242R @ 3.10 GHz --- isolated, predictable cycle-to-latency.}
   \end{center}
 \end{frame}
 
-\begin{frame}{PAPI: Hardware Performance Counters}
+% =================================================================
+% SLIDE 6: TOOL KERNELS & CONTROL BASELINE
+% =================================================================
+\begin{frame}{Tool Kernels \& Control Baseline}
   \begin{columns}
-    \begin{column}{0.5\textwidth}
-      \textbf{Performance API} $\rightarrow$ direct access to the Linux kernel's Performance Monitoring Unit (PMU).
-      \vspace{0.4em}
-      \begin{block}{Four hardware events tracked}
-        \begin{itemize}
-          \item \texttt{PAPI\_TOT\_CYC} -- total cycles
-          \item \texttt{PAPI\_TOT\_INS} -- total instructions
-          \item \texttt{PAPI\_BR\_MSP} -- branch mispredictions
-          \item \texttt{PAPI\_L3\_TCM} -- L3 cache misses
-        \end{itemize}
-      \end{block}
-    \end{column}
-    \begin{column}{0.5\textwidth}
-      \textbf{Windowing strategy:}
-      \begin{itemize}
-        \item \textcolor{neonmint}{\textbf{CPU Window 1:}} prompt assembly + tokenization
-        \item \textcolor{neonviolet}{\textbf{CPU Window 2:}} decoding + JSON extraction
-      \end{itemize}
-      \vspace{0.4em}
-      \begin{exampleblock}{Testbed}
-        Intel Xeon Gold 6242R @ 3.10 GHz -- isolated, predictable cycle-to-latency.
-      \end{exampleblock}
-      \small Hardware EventSets guarded in \texttt{try\dots finally} to avoid PMU starvation.
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\begin{frame}{Three C++ Tool Kernels}
-  \begin{columns}
-    \begin{column}{0.33\textwidth}
+    \begin{column}{0.25\textwidth}
       \begin{block}{Compute-Bound}
-        \textbf{AST Math Evaluator}
-        \begin{itemize}
-          \item Nested math expressions
-          \item Recursive parser
-          \item Stresses \textbf{branch prediction}
-          \item Tests instruction throughput
-        \end{itemize}
+        \textbf{AST Evaluator}\\[0.2em]
+        {\small Nested math expressions stressing \textbf{branch prediction}.}
       \end{block}
     \end{column}
-    \begin{column}{0.33\textwidth}
+    \begin{column}{0.25\textwidth}
       \begin{block}{Memory-Bound}
-        \textbf{SQLite DB Scan}
-        \begin{itemize}
-          \item Forced full-table scan
-          \item \texttt{LIKE} bypasses indexes
-          \item Thrashes \textbf{LLC (L3)}
-          \item Classic memory wall
-        \end{itemize}
+        \textbf{SQLite Scan}\\[0.2em]
+        {\small Forced full-table scans intentionally thrashing the \textbf{LLC}.}
       \end{block}
     \end{column}
-    \begin{column}{0.33\textwidth}
+    \begin{column}{0.25\textwidth}
       \begin{block}{I/O-Bound}
-        \textbf{Directory Walker}
-        \begin{itemize}
-          \item Recursive FS traversal
-          \item OS metadata queries
-          \item Stresses \textbf{syscalls}
-          \item Context-switch heavy
-        \end{itemize}
+        \textbf{FS Walker}\\[0.2em]
+        {\small Recursive traversal stressing \textbf{OS context switches}.}
       \end{block}
+    \end{column}
+    \begin{column}{0.25\textwidth}
+      \begin{alertblock}{Control}
+        \textbf{Direct Pipeline}\\[0.2em]
+        {\small Static regex routing, \textbf{completely bypassing} the GPU \& LLM.}
+      \end{alertblock}
     \end{column}
   \end{columns}
   \vspace{0.8em}
   \begin{center}
-    \textcolor{neonmint}{\textbf{Each kernel manages its own PAPI profiling around the core workload.}}
+    \textcolor{neonmint}{\textbf{The ``Speed of Light'' control isolates the exact cost of orchestration.}}
   \end{center}
 \end{frame}
 
-\begin{frame}{The Control Baseline: \texttt{pipeline\_mode="direct"}}
+% =================================================================
+% SLIDE 7: KEY FINDING 1 - THE AGENTIC TAX
+% =================================================================
+\begin{frame}{Key Finding 1 --- The ``Agentic Tax''}
   \begin{columns}
     \begin{column}{0.55\textwidth}
-      \textbf{Question:} How do we prove the ``Agentic Tax'' exists?
-      \vspace{0.5em}
-      \begin{block}{Direct Baseline}
-        \begin{itemize}
-          \item GPU and LLM \textbf{completely bypassed}
-          \item Regex extracts target paths from prompt
-          \item C++ kernels invoked directly
-          \item Represents the theoretical ``speed of light''
-        \end{itemize}
-      \end{block}
-      \vspace{0.3em}
-      \textbf{Result:} Subtracting Direct from Full Agentic gives us the \textbf{exact cost of orchestration}.
+      \begin{center}
+        \includegraphics[width=\textwidth]{../results/ExpA_Agentic_Tax.png}
+      \end{center}
+      \vspace{-0.3em}
+      {\scriptsize\textcolor{ash}{Figure 1: Log-scale latency --- Direct C++ vs.\ Full Agentic Loop.}}
     \end{column}
     \begin{column}{0.45\textwidth}
-      \begin{alertblock}{Full Agentic Loop}
-        Qwen-2.5-7B autonomously:
-        \begin{itemize}
-          \item Parses prompt
-          \item Emits JSON
-          \item Executes tool
-          \item Re-injects result
-        \end{itemize}
+      \begin{itemize}
+        \item \textcolor{neonpink}{\textbf{I/O Walk:}} Native $\sim$15\,ms $\rightarrow$ Agentic $\sim$1\,s\\
+              \textbf{69.5$\times$} slowdown
+        \item \textcolor{neonamber}{\textbf{AST Math:}} \textbf{14.9$\times$} penalty
+        \item \textcolor{neonice}{\textbf{DB Scan:}} only \textbf{2.4$\times$} ($\sim$764\,ms native)
+      \end{itemize}
+      \vspace{0.3em}
+      \begin{alertblock}{Amdahl's Law}
+        The DB scan's 2.5 billion native cycles amortize the fixed framework cost. The tax is a \textbf{massive fixed cost}, not a proportional scalar.
       \end{alertblock}
-      \begin{center}
-        \textcolor{neonmint}{\textbf{Direct vs. Agentic}}\\
-        \small\textcolor{mist}{= the Agentic Tax}
-      \end{center}
     \end{column}
   \end{columns}
 \end{frame}
 
-\begin{frame}{Hardware Optimizations Applied}
+% =================================================================
+% SLIDE 8: KEY FINDING 2 - CONTEXT ACCUMULATION
+% =================================================================
+\begin{frame}{Key Finding 2 --- Context Accumulation (Multi-Step)}
   \begin{columns}
-    \begin{column}{0.5\textwidth}
-      \begin{block}{1. SIMD Vectorization (AVX2)}
-        \small Applied to the AST math evaluator. 256-bit wide SIMD registers intended to accelerate numerical parsing.
-      \end{block}
-      \begin{block}{2. Software Prefetching}
-        \small \texttt{\_\_builtin\_prefetch} with lookahead distance of 32 elements. Latency hiding for cold-cache DB scans.
-      \end{block}
+    \begin{column}{0.55\textwidth}
+      \begin{center}
+        \includegraphics[width=\textwidth]{../results/ExpB_Multistep_Analysis.png}
+      \end{center}
+      \vspace{-0.3em}
+      {\scriptsize\textcolor{ash}{Figure 2: Instruction volume \& IPC across a multi-step ReAct loop.}}
     \end{column}
-    \begin{column}{0.5\textwidth}
-      \begin{block}{3. OpenMP Concurrency}
-        \small Task-parallel directory walker. Overlaps I/O-bound system calls across threads.
+    \begin{column}{0.45\textwidth}
+      \begin{block}{The Cold Start Penalty}
+        At Step~1, the framework executes $\sim$\textbf{82\,M instructions} simply to parse and load JSON schema definitions.
       \end{block}
       \vspace{0.3em}
-      \begin{exampleblock}{Compiler Flags}
-        \texttt{-O3 -march=native -mavx2} \\
-        \texttt{-O3 -march=native -fopenmp}
+      \begin{alertblock}{The Stateless Trap}
+        Because the LLM is stateless, the framework's instruction volume \textbf{grows linearly} with each successive step, continuously re-serializing an expanding conversation history.
+      \end{alertblock}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% =================================================================
+% SLIDE 9: KEY FINDING 3 - THE MASKING EFFECT
+% =================================================================
+\begin{frame}{Key Finding 3 --- The Masking Effect}
+  \begin{columns}
+    \begin{column}{0.55\textwidth}
+      \begin{center}
+        \includegraphics[width=\textwidth]{../results/Final_Research_Comparison.png}
+      \end{center}
+      \vspace{-0.3em}
+      {\scriptsize\textcolor{ash}{Figure 5: System-level cycle distribution across all optimized domains.}}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \begin{block}{The Micro Win}
+        Software prefetching (\texttt{\_\_builtin\_prefetch}) on the memory-bound DB kernel:
+        \begin{itemize}
+          \item Kernel IPC \textbf{+14.2\%}
+          \item Saved $\sim$\textbf{66\,M} core CPU cycles
+        \end{itemize}
+      \end{block}
+      \vspace{0.3em}
+      \begin{alertblock}{The System Reality}
+        End-to-end system speedup remained \textbf{below 1\%}.\\[0.3em]
+        The massive Python orchestration bloat \textbf{statistically swallows and nullifies} kernel-level microarchitectural victories.
+      \end{alertblock}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+% =================================================================
+% SLIDE 10: CONCLUSION & FUTURE WORK
+% =================================================================
+\begin{frame}{Conclusion \& Future Work}
+  \begin{tikzpicture}[remember picture, overlay]
+    \fill[neonviolet, opacity=0.02] (current page.south east) ++(-2,1) circle (6cm);
+  \end{tikzpicture}
+  \begin{columns}
+    \begin{column}{0.5\textwidth}
+      \begin{exampleblock}{The Verdict}
+        Current agentic architectures are \textbf{critically crippled} by the orchestration bottleneck. Hardware-software co-design must shift away from optimizing tool-execution kernels and \textbf{aggressively target the orchestration layer itself}.
       \end{exampleblock}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \begin{block}{Proposed Solutions}
+        \begin{enumerate}
+          \item \textcolor{neonmint}{\textbf{Compiled Orchestrators}}\\
+                {\small Transitioning to Rust/C++.}
+          \item \textcolor{neonviolet}{\textbf{Continuous Batching Engines}}\\
+                {\small Adopting vLLM + PagedAttention.}
+          \item \textcolor{neonpink}{\textbf{Binary Protocols}}\\
+                {\small Replacing JSON with Apache Arrow.}
+        \end{enumerate}
+      \end{block}
     \end{column}
   \end{columns}
   \vspace{0.6em}
-  \begin{center}
-    \textcolor{neonamber}{\textbf{Do these optimizations matter in an agentic context?}}
-  \end{center}
-\end{frame}
-
-% =================================================================
-% PART III: FAZAL REHMAN
-% =================================================================
-\section{Evaluation Results}
-
-\begin{frame}{Quantifying the Agentic Tax (End-to-End Latency)}
-  \begin{center}
-    \includegraphics[width=0.92\textwidth]{../results/ExpA_Agentic_Tax.png}
-  \end{center}
-  \vspace{-0.4em}
-  \begin{center}
-    \small \textcolor{ash}{Log-scale latency: Direct C++ vs. Full Agentic Loop across three workload classes.}
-  \end{center}
-\end{frame}
-
-\begin{frame}{The Agentic Tax is a Fixed-Cost Penalty}
-  \begin{columns}
-    \begin{column}{0.55\textwidth}
-      \begin{itemize}
-        \item \textcolor{neonpink}{\textbf{I/O walker:} $69.5\times$ slowdown}\\
-              \small Native: $\sim$15 ms $\rightarrow$ Agentic: $\sim$1 s
-        \item \textcolor{neonamber}{\textbf{AST math:} $14.9\times$ slowdown}
-        \item \textcolor{neonice}{\textbf{DB scan:} only $2.4\times$ slowdown}\\
-              \small $\sim$764 ms native, Agentic tax amortized
-      \end{itemize}
-      \vspace{0.5em}
-      \begin{alertblock}{Key Finding}
-        The tax is \textbf{not} proportional; it's a \textbf{massive fixed cost} that disproportionately punishes lightweight tools.
-      \end{alertblock}
-    \end{column}
-    \begin{column}{0.45\textwidth}
-      \begin{block}{Amdahl Saves the DB scan}
-        The heavy 2.5 billion-cycle DB workload is so long that the orchestration overhead becomes a \textit{proportionally} smaller slice.
-      \end{block}
-      \vspace{0.4em}
-      \begin{center}
-        \textcolor{neonmint}{\textbf{For most tools, the framework dominates execution time.}}
-      \end{center}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\begin{frame}{Compounding Overhead in Multi-Step Workflows}
-  \textbf{``Gauntlet'' prompt:} execute I/O walk $\rightarrow$ DB query $\rightarrow$ math evaluation in \textbf{one context window}.
-  \begin{center}
-    \includegraphics[width=0.92\textwidth]{../results/ExpB_Multistep_Analysis.png}
-  \end{center}
-  \vspace{-0.4em}
-  \begin{center}
-    \small \textcolor{ash}{(Left) Framework vs. tool instruction volume. (Right) IPC gap between Python and native C++.}
-  \end{center}
-\end{frame}
-
-\begin{frame}{Two Phenomena Revealed by Multi-Step Telemetry}
-  \begin{columns}
-    \begin{column}{0.5\textwidth}
-      \begin{block}{1. Framework: Cold Start + Drift}
-        \begin{itemize}
-          \item \textbf{Step 1:} $\sim$82M instructions\\
-                \small one-time JSON schema load
-          \item \textbf{Steps 2--4:} baseline $\sim$13.7M\\
-                \small grows linearly to 18.8M
-          \item Cause: \textbf{stateless re-serialization} of the growing context window
-          \item Framework IPC rises 1.65 $\rightarrow$ 1.91
-        \end{itemize}
-      \end{block}
-    \end{column}
-    \begin{column}{0.5\textwidth}
-      \begin{block}{2. Tools: Payload-Dictated}
-        \begin{itemize}
-          \item C++ metrics independent of step count
-          \item Instructions: \textbf{10M} (I/O) $\rightarrow$ \textbf{5B} (DB)
-          \item Kernels near $\sim$2.0 IPC (max throughput)
-          \item DB scan IPC = 2.03 (prefetcher wins)
-          \item AST IPC = 1.99 (branch mispredicts)
-        \end{itemize}
-      \end{block}
-    \end{column}
-  \end{columns}
-  \vspace{0.3em}
-  \begin{center}
-    \textcolor{neonpink}{\textbf{LLM coordination overhead is a compounding tax that scales with autonomy.}}
-  \end{center}
-\end{frame}
-
-\begin{frame}{Optimization 1: The Vectorization Wall (AVX2)}
-  \begin{columns}
-    \begin{column}{0.55\textwidth}
-      \includegraphics[width=\textwidth]{../results/Exp3_Masking_Effect.png}
-    \end{column}
-    \begin{column}{0.45\textwidth}
-      \textbf{Hypothesis:} AVX2 (256-bit SIMD) should accelerate nested math parsing.
-      \vspace{0.3em}
-      \begin{alertblock}{Result: FAILED}
-        \begin{itemize}
-          \item IPC stagnant at $\approx 1.99$
-          \item Cycles: $84.1\mathrm{M} \rightarrow 83.6\mathrm{M}$
-          \item Only $\mathbf{0.6\%}$ improvement
-        \end{itemize}
-      \end{alertblock}
-      \vspace{0.3em}
-      \textbf{Why:} Recursive, branch-heavy, pointer-chasing AST parsing \textbf{defeats auto-vectorization}.
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\begin{frame}{Optimization 2: Software Prefetching Wins\dots at the Kernel}
-  \begin{center}
-    \includegraphics[width=0.92\textwidth]{../results/Exp4_DB_Memory_Wall_Analysis.png}
-  \end{center}
-  \vspace{-0.4em}
-  \begin{columns}
-    \begin{column}{0.5\textwidth}
-      \begin{exampleblock}{Microarchitectural Victory}
-        \begin{itemize}
-          \item \textbf{IPC: +14.2\%} ($1.241 \rightarrow 1.417$)
-          \item $\sim$66M fewer cycles
-          \item $\sim$50 ms wall-clock saved on the kernel
-        \end{itemize}
-      \end{exampleblock}
-    \end{column}
-    \begin{column}{0.5\textwidth}
-      \begin{alertblock}{System-Level Reality}
-        \begin{itemize}
-          \item Total request $\approx 6.3$ s
-          \item End-to-end speedup $\mathbf{< 1\%}$
-        \end{itemize}
-      \end{alertblock}
-    \end{column}
-  \end{columns}
-\end{frame}
-
-\begin{frame}{The Masking Effect -- System-Level View}
-  \begin{center}
-    \includegraphics[width=0.95\textwidth]{../results/Final_Research_Comparison.png}
-  \end{center}
-  \vspace{-0.4em}
-  \begin{center}
-    \textcolor{neonpink}{\textbf{Kernel-level wins are rendered statistically invisible to the end user.}}
-  \end{center}
-\end{frame}
-
-\begin{frame}{Limitations}
-  \begin{block}{1. PAPI Profiling Artifact (OpenMP)}
-    \begin{itemize}
-      \item High-level PAPI tracks \textbf{only the calling thread}
-      \item Master thread spin-waits on OpenMP barrier $\rightarrow$ cycles accumulate but instructions don't
-      \item Reported IPC plummeted to \textbf{0.14} -- a profiling blind spot, not a real regression
-      \item \textbf{Fix:} thread-local PAPI EventSets for future multi-threaded work
-    \end{itemize}
-  \end{block}
-  \begin{block}{2. OpenMP Negative Scaling}
-    \begin{itemize}
-      \item Parallel FS walker used $15\times$ \textit{more} CPU cycles than the serial baseline
-      \item Root cause: \texttt{std::atomic} global counter $\rightarrow$ L1 cache-line contention
-      \item Plus OS-kernel serialization of small-directory disk reads
-    \end{itemize}
-  \end{block}
-  \begin{block}{3. Static Workloads}
-    \begin{itemize}
-      \item Sampling disabled; static payloads $\rightarrow$ our numbers are a \textbf{best-case lower bound}
-      \item Real LLMs hallucinate $\rightarrow$ multi-turn error correction $\rightarrow$ even worse tax
-    \end{itemize}
-  \end{block}
-\end{frame}
-
-\begin{frame}{Conclusion: Rethinking Agentic Systems}
-  \begin{exampleblock}{Headline Findings}
-    \begin{itemize}
-      \item Lightweight agent tools suffer up to $\mathbf{69.5\times}$ latency slowdown.
-      \item Kernel IPC improvements of $\mathbf{14.2\%}$ translate to $\mathbf{<1\%}$ end-to-end speedup.
-      \item This is the \textbf{Masking Effect}: framework bloat swallows hardware victories.
-    \end{itemize}
-  \end{exampleblock}
-
-  \textbf{Future Work:}
-  \begin{enumerate}
-    \item \textbf{High-throughput inference engines:} continuous batching + PagedAttention (e.g.,\ vLLM).
-    \item \textbf{Compiled orchestrators:} migrate Python $\rightarrow$ Rust/C++; use SIMD JSON parsers (\texttt{orjson}, \texttt{simdjson}).
-    \item \textbf{Binary protocols:} fine-tune LLMs to emit Apache Arrow instead of JSON strings.
-  \end{enumerate}
-
-  \vspace{0.4em}
   \begin{center}
     \textcolor{neonmint}{\textbf{Until the orchestration layer is treated as a high-performance data plane,\\
     the promise of agentic AI will remain masked by its own framework.}}
   \end{center}
 \end{frame}
 
+% =================================================================
+% SLIDE 11: LIVE DEMO & Q&A
+% =================================================================
 \begin{frame}[plain]
   \begin{tikzpicture}[remember picture, overlay]
     % Abstract decorative geometry
@@ -642,17 +403,20 @@
     \fill[neonviolet, opacity=0.02] (current page.north east) ++(-2,-2) circle (7cm);
   \end{tikzpicture}
   \begin{center}
-    \vspace{2em}
-    {\Huge\textcolor{bone}{\textbf{Thank You}}}\\
+    \vspace{1.5em}
+    {\Huge\textcolor{bone}{\textbf{Live Demo \& Q\,\&\,A}}}\\
     \vspace{1.5em}
     \textcolor{neonmint}{\rule{4cm}{0.6pt}}\\
     \vspace{1em}
     {\small\textcolor{mist}{Beyond the GPU:}}\\
     {\small\textit{\textcolor{ash}{A Microarchitectural Analysis of LLM Tool-Calling Kernels}}}\\
-    \vspace{1em}
-    {\footnotesize\textcolor{ash}{Kunpeng Zhang \quad$\cdot$\quad TJ Grewal \quad$\cdot$\quad Fazal Rehman}}\\
-    {\scriptsize\textcolor{ash}{Simon Fraser University}}\\
-    \vspace{0.8em}
+    \vspace{1.2em}
+    {\footnotesize\textcolor{bone}{Terminal 1:} \textcolor{mist}{Run the Orchestrator (\texttt{model\_loader.py})}}\\[0.3em]
+    {\footnotesize\textcolor{bone}{Terminal 2:} \textcolor{mist}{Execute the Stress Payloads}}\\
+    \vspace{1.2em}
+    {\footnotesize\textcolor{ash}{Kunpeng Zhang \quad$\cdot$\quad Fazal Rehman \quad$\cdot$\quad TJ Grewal}}\\
+    {\scriptsize\textcolor{ash}{CMPT 450}}\\
+    \vspace{0.6em}
     {\scriptsize\textcolor{ash}{\texttt{github.com/AndyZzzZzzZzz/beyond-gpu-kernels}}}
   \end{center}
 \end{frame}
